@@ -1,0 +1,60 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments (common names)
+env/
+venv/
+.venv/
+ENV/
+VENV/
+
+# Environment variable files (contains secrets)
+.env
+.env.*.local
+.env.local
+
+# Django local DB
+db.sqlite3
+*.sqlite3
+
+# Django media and static builds
+/media/
+/staticfiles/
+/static/
+
+# Django migrations - معمولاً بهتر است آنها را کمیت کنید، بنابراین این خط را فعال نکنید
+# اگر به هر دلیلی نمی‌خواهید مایگریشن‌ها را در گیت قرار بدهید، خط بعد را برداشته و فعال کنید:
+# */migrations/*.py
+# */migrations/*.pyc
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Testing / coverage
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+
+# Optional: compiled assets
+*.pyc
+*.pyo
