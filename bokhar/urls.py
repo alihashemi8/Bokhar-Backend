@@ -8,3 +8,4 @@ urlpatterns = [
     path("api/", include("notifications.urls")),
 
 ]
+

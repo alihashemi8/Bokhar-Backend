@@ -1,4 +1,3 @@
-# users/utils.py
 import random
 from .models import OTP
 
