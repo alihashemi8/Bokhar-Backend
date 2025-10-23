@@ -89,14 +89,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'  # مدل سفارشی User
 
 # --------- تنظیمات CORS ----------
-CORS_ALLOW_ALL_ORIGINS = True
-  
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173", 
-]
 
+
+  
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = ["http://localhost:5173"]
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # یا هر پورتی که React اجرا میشه
+]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -115,7 +117,7 @@ SIMPLE_JWT = {
     "AUTH_COOKIE": "access",
     "AUTH_COOKIE_REFRESH": "refresh",
     "AUTH_COOKIE_HTTP_ONLY": True,
-    "AUTH_COOKIE_SECURE": False,   # در production حتما True کن
+    "AUTH_COOKIE_SECURE": False,
     "AUTH_COOKIE_SAMESITE": "Lax",
 
     # برای راحتی در view ها

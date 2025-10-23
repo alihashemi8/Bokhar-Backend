@@ -4,12 +4,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import get_user_model, authenticate
 from django.conf import settings
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from .models import OTP
 from .utils import create_and_save_otp
 from rest_framework.response import Response
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 User = get_user_model()
 
@@ -58,8 +59,13 @@ def submit_otp(request):
     if not phone:
         return JsonResponse({"status": "error", "message": "شماره تلفن لازم است"}, status=400)
 
-    create_and_save_otp(phone)
+    try:
+        create_and_save_otp(phone, resend=False)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=429)
+
     return JsonResponse({"status": "ok", "message": "OTP ارسال شد"})
+
 
 @csrf_exempt
 def resend_otp(request):
@@ -69,10 +75,16 @@ def resend_otp(request):
         data = json.loads(request.body)
     except Exception:
         return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
+
     phone = data.get("phone")
     if not phone:
         return JsonResponse({"status": "error", "message": "شماره تلفن لازم است"}, status=400)
-    create_and_save_otp(phone)
+
+    try:
+        create_and_save_otp(phone, resend=True)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=429)
+
     return JsonResponse({"status": "ok", "message": "کد دوباره ارسال شد"})
 
 @csrf_exempt
@@ -207,7 +219,11 @@ def check_auth(request):
 
     user = request.user
     role = "admin" if getattr(user, "is_staff", False) else "customer"
-    return JsonResponse({"status": "ok", "user": {"id": user.id, "phone": user.phone, "username": user.username, "role": role}})
+    return JsonResponse({
+    "isAuthenticated": True,
+    "user": {"id": user.id, "phone": user.phone, "username": user.username, "role": role}
+})
+
 
 @api_view(["POST"])
 def logout_user(request):
@@ -218,3 +234,13 @@ def logout_user(request):
     response.delete_cookie(access_cookie, path="/")
     response.delete_cookie(refresh_cookie, path="/")
     return response
+
+
+class CookieJWTAuthentication(JWTAuthentication):
+    def authenticate(self, request):
+        cookie_name = getattr(settings.SIMPLE_JWT, "AUTH_COOKIE", "access")
+        raw_token = request.COOKIES.get(cookie_name)
+        if raw_token is None:
+            return None
+        validated_token = self.get_validated_token(raw_token)
+        return self.get_user(validated_token), validated_token
