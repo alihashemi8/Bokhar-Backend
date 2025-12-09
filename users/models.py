@@ -13,7 +13,7 @@ from django.utils import timezone
 import hashlib
 
 class OTP(models.Model):
-    phone = models.CharField(max_length=11, db_index=True)
+    phone = models.CharField(max_length=11, db_index=True)#db_index برای سریعتر شدن
     otp_hash = models.CharField(max_length=64)  # sha256 hex
     created_at = models.DateTimeField(auto_now_add=True)
     attempts = models.IntegerField(default=0)
