@@ -1,15 +1,17 @@
 from django.urls import path
+
 from . import views
 
-app_name = "users"  
+app_name = "users"
 
 urlpatterns = [
-    path("submit/", views.submit_otp, name="submit-otp"),
+    path("register/", views.RegisterView.as_view(), name="register"),
+    path("login/", views.LoginView.as_view(), name="login"),
     path("resend-otp/", views.resend_otp, name="resend-otp"),
     path("verify-otp/", views.verify_otp, name="verify-otp"),
-    path("register/", views.register_user, name="register"),
-    path("login/", views.login_user, name="login"),
-    path("check-auth/", views.check_auth, name="check-auth"),
-    path("logout/", views.logout_user, name="logout"),
-    path("me/", views.get_me, name="me"),
+
+    path("logout/", views.LogOutView.as_view(), name="logout"),
+
+    path("logout1/", views.logout_user, name="logout"),
+
 ]

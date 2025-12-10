@@ -1,8 +1,11 @@
-from .models import OTP
-from django.utils import timezone
 import random
 
-RESEND_INTERVAL_SECONDS = 60 
+from django.utils import timezone
+
+from .models import OTP
+
+RESEND_INTERVAL_SECONDS = 60
+
 
 def create_and_save_otp(phone, resend=False):
     now = timezone.now()
@@ -13,7 +16,9 @@ def create_and_save_otp(phone, resend=False):
             # بررسی فاصله زمانی resend
             elapsed = (now - latest_otp.created_at).total_seconds()
             if elapsed < RESEND_INTERVAL_SECONDS:
-                raise Exception(f"لطفاً {int(RESEND_INTERVAL_SECONDS - elapsed)} ثانیه صبر کنید قبل از درخواست مجدد OTP")
+                raise Exception(
+                    f"لطفاً {int(RESEND_INTERVAL_SECONDS - elapsed)} ثانیه صبر کنید قبل از درخواست مجدد OTP"
+                )
             # حذف OTP قدیمی قبل از ایجاد OTP جدید
             latest_otp.delete()
 
