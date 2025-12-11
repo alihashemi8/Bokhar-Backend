@@ -7,10 +7,8 @@ from decouple import config
 SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=True, cast=bool)
 
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 ALLOWED_HOSTS = []
 
@@ -86,7 +84,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 AUTHENTICATION_BACKENDS = [
     "users.authenticate.CustomBackend",
-"django.contrib.auth.backends.ModelBackend",  # برای ادمین
+    "django.contrib.auth.backends.ModelBackend",  # برای ادمین
 ]
 
 # Internationalization
@@ -124,14 +122,13 @@ REST_FRAMEWORK = {
     # ],
 }
 
-
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_COOKIE": "access",
     "AUTH_COOKIE_REFRESH": "refresh",
     "AUTH_COOKIE_HTTP_ONLY": True,
-    "AUTH_COOKIE_SECURE": False,#در محیط واقعی true https
+    "AUTH_COOKIE_SECURE": False,  # در محیط واقعی true https
     "AUTH_COOKIE_SAMESITE": "Lax",
     # برای راحتی در view ها
     "ACCESS_TOKEN_LIFETIME_SECONDS": int(timedelta(hours=1).total_seconds()),
