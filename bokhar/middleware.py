@@ -1,12 +1,12 @@
-
 import logging
-from django.utils.deprecation import MiddlewareMixin
+
 from django.conf import settings
+from django.utils.deprecation import MiddlewareMixin
 
 logger = logging.getLogger(__name__)
 
-class CookieToHeaderMiddleware(MiddlewareMixin):
 
+class CookieToHeaderMiddleware(MiddlewareMixin):
 
     def process_request(self, request):
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
