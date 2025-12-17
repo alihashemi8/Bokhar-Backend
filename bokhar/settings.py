@@ -25,6 +25,8 @@ INSTALLED_APPS = [
     "corsheaders",
     "users",
     "notifications",
+    "django_celery_results",
+    "rest_framework_simplejwt",
 ]
 
 MIDDLEWARE = [
@@ -145,3 +147,14 @@ LOGGING = {
         "level": "DEBUG",
     },
 }
+# cache
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": config("REDIS_CACHE_URL"),
+    }
+}
+
+CELERY_BROKER_URL = config("CELERY_BROKER_URL")  # برای ادرس سلری
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"

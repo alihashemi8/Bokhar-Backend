@@ -14,14 +14,10 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
-from .models import OTP, User
-from .serializers import (
-    LoginSerializer,
-    OTPVerifySerializer,
-    RegisterSerializer,
-    UserSerializer,
-)
-from .utils import create_and_save_otp
+from .models import *
+from .serializers import *
+from .tasks import *
+from .utils import *
 
 
 def _set_jwt_cookies(response, refresh_token: RefreshToken):
@@ -67,71 +63,101 @@ def _set_jwt_cookies(response, refresh_token: RefreshToken):
     )
 
 
+class SendOTPView(APIView):
+    serializer_class = SendOTPSerializer
+
+    def post(self, request):
+        serializers = self.serializer_class(data=request.data)
+        if serializers.is_valid():
+            phone = serializers.validated_data["phone"]
+            code = generateOTP(phone)
+            send_sms.delay(phone, code)
+            return Response({"detail": "کد ارسال شد"}, status=status.HTTP_200_OK)
+        else:
+            return Response(serializers.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 # csf_token = زمانی نیاز است که توکن ها داخل کوکی باشد کاربر داخل سایت باشد
 
 
-@method_decorator(csrf_protect, name="dispatch")
-class RegisterView(APIView):
-    serializer_class = RegisterSerializer
+@method_decorator(csrf_exempt, name="dispatch")
+class RegisterOTPView(APIView):
+    serializer_class = RegisterOTPSerializer
 
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)  # ورودی از کاربر میگیره
+        serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            response = JsonResponse(
-                {
-                    "phone": user.phone,
-                    "fullname": user.fullname,
-                    "admin": user.is_admin,
-                    "message": "ثبت نام با موفقیت انجام شد",
-                },
-                status=201,
-            )
-
-            return response
-
-        else:
-            return JsonResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@method_decorator(csrf_protect, name="dispatch")
-class LoginView(APIView):
-    serializer_class = LoginSerializer
-
-    def post(self, request):
-        serializer = self.serializer_class(
-            data=request.data, context={"request": request}
-        )
-        print("دیتا", request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data["user"]
-            response = JsonResponse(
+            refresh = RefreshToken.for_user(user)
+            response = Response(
                 {
                     "phone": user.phone,
                     "fullname": user.fullname,
                     "user": user.is_admin,
                     "message": "خوش امدید",
                 },
-                status=201,
+                status=200,
+            )
+            _set_jwt_cookies(response, refresh)
+            return response
+        else:
+            return Response(serializer.errors)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class LoginOTPView(APIView):
+    serializer_class = LoginOTPSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            user = serializer.validated_data["user"]
+            refresh = RefreshToken.for_user(user)
+            response = Response(
+                {
+                    "phone": user.phone,
+                    "fullname": user.fullname,
+                    "user": user.is_admin,
+                    "message": "خوش امدید",
+                },
+                status=200,
+            )
+            _set_jwt_cookies(response, refresh)
+            return response
+        else:
+            return Response(serializer.errors)
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class LoginPasswordView(APIView):
+    serializer_class = LoginPasswordSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+
+        if serializer.is_valid():
+            user = serializer.validated_data["user"]
+            response = Response(
+                {
+                    "phone": user.phone,
+                    "fullname": user.fullname,
+                    "user": user.is_admin,
+                    "message": "خوش امدید",
+                },
+                status=200,
             )
             print(user.phone, user.fullname)
             _set_jwt_cookies(response, refresh_token=RefreshToken.for_user(user))
             return response
         else:
-            return JsonResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.token_blacklist.models import (
-    BlacklistedToken,
-    OutstandingToken,
-)
+from rest_framework_simplejwt.token_blacklist.models import (BlacklistedToken,
+                                                             OutstandingToken)
 from rest_framework_simplejwt.tokens import RefreshToken
-
-
-class LoginOtpView(APIView):
-    serializer_class = OTPVerifySerializer
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -144,46 +170,51 @@ class LogOutView(APIView):
             {"status": "ok", "message": "خروج انجام شد"}, status=status.HTTP_200_OK
         )
 
-        access_token_jwt = settings.SIMPLE_JWT.get("AUTH_COOKIE", "access")
-        access_token_cookie = request.COOKIES.get(access_token_jwt)
+        # اسم کوکی‌ها
+        access_token_cookie_name = settings.SIMPLE_JWT.get("AUTH_COOKIE", "access")
+        refresh_token_cookie_name = settings.SIMPLE_JWT.get(
+            "AUTH_COOKIE_REFRESH", "refresh"
+        )
 
-        refresh_token_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH")
-        refresh_cookie = request.COOKIES.get(refresh_token_name)
-
-        response.delete_cookie(access_token_cookie, path="/")
-        response.delete_cookie(refresh_cookie, path="/")
+        # حذف کوکی‌ها با اسم
+        response.delete_cookie(access_token_cookie_name, path="/")
+        response.delete_cookie(refresh_token_cookie_name, path="/")
 
         return response
 
 
 @method_decorator(csrf_protect, name="dispatch")
 class RefreshTokenView(APIView):
+
     def post(self, request):
-        refresh_token_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH")
+        refresh_token_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh")
         refresh_cookie = request.COOKIES.get(refresh_token_name)
+
         if refresh_cookie is None:
-            return JsonResponse(
-                {"detail": "ارور درخواست ورود دوباره رفرش توکن"},
+            return Response(
+                {"detail": "رفرش توکن یافت نشد، لطفاً دوباره وارد شوید."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        else:
-            try:
-                refresh_token = RefreshToken(refresh_cookie)
-                access_token = str(refresh_token.access_token)
-                response = Response({"access": access_token}, status=200)
-                response.set_cookie(
-                    key=getattr(settings, "SIMPLE_JWT", {}).get(
-                        "AUTH_COOKIE", "access"
-                    ),
-                    value=access_token,
-                    httponly=True,
-                    secure=False,
-                    samesite="Lax",
-                    path="/",
-                )
-                return response
-            except Exception as e:
-                return Response({"detail": "توکن متعبر نیست"}, status=401)
+
+        try:
+            refresh = RefreshToken(refresh_cookie)
+            access_token = str(refresh.access_token)
+
+            response = Response({"access": access_token}, status=200)
+
+            response.set_cookie(
+                key=settings.SIMPLE_JWT.get("AUTH_COOKIE", "access"),
+                value=access_token,
+                httponly=True,
+                secure=False,  # در production مقدار True
+                samesite="Lax",
+                path="/",
+            )
+
+            return response
+
+        except Exception:
+            return Response({"detail": "رفرش توکن معتبر نیست"}, status=401)
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -194,167 +225,41 @@ class VerifyTokenView(APIView):
         if access_token_cookie is None:
             return Response({"detail": "ارور"}, status=400)
         try:
-            AccsessToken(access_token_cookie)
+            AccessToken(access_token_cookie)
             return Response({"detail": "توکن معتبر"}, status=200)
         except Exception as e:
             return Response(status=401)
 
 
-@csrf_exempt
-def resend_otp(request):
-    if request.method != "POST":
-        return JsonResponse(
-            {"status": "error", "message": "Method not allowed"}, status=405
+class EditFullNameView(APIView):
+    serializer_class = EditFullNameSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def put(self, request):
+        user = request.user
+        serializer = self.serializer_class(
+            user, data=request.data, context={"request": request}
         )
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"detail": "اطلاعات با موفقیت بروزرسانی شد"})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    phone = data.get("phone")
-    if not phone:
-        return JsonResponse(
-            {"status": "error", "message": "شماره تلفن لازم است"}, status=400
+
+class EditPasswordView(APIView):
+    serializer_class = EditPasswordSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def put(self, request):
+        user = request.user
+        serializer = self.serializer_class(
+            user, data=request.data, context={"request": request}
         )
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"detail": "اطلاعات با موفقیت بروزرسانی شد"})
 
-    try:
-        create_and_save_otp(phone, resend=True)
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=429)
-
-    return JsonResponse({"status": "ok", "message": "کد دوباره ارسال شد"})
-
-
-@csrf_exempt
-def verify_otp(request):
-
-    if request.method != "POST":
-        return JsonResponse(
-            {"status": "error", "message": "Method not allowed"}, status=405
-        )
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
-
-    phone = data.get("phone")
-    otp_received = data.get("otp")
-    if not phone or not otp_received:
-        return JsonResponse(
-            {"status": "error", "message": "phone و otp لازم است"}, status=400
-        )
-
-    try:
-        otp_obj = OTP.objects.filter(phone=phone).latest("created_at")
-    except OTP.DoesNotExist:
-        return JsonResponse(
-            {"status": "error", "message": "کدی وجود ندارد"}, status=400
-        )
-
-    if otp_obj.is_expired():
-        return JsonResponse({"status": "error", "message": "کد منقضی شده"}, status=400)
-    if otp_obj.attempts >= 5:
-        return JsonResponse(
-            {"status": "error", "message": "تلاش بیش از حد"}, status=400
-        )
-
-    entered_hash = OTP.hash_otp(otp_received)
-    if entered_hash != otp_obj.otp_hash:
-        otp_obj.attempts += 1
-        otp_obj.save()
-        return JsonResponse({"status": "error", "message": "کد اشتباه است"}, status=400)
-
-    # موفقیت: ایجاد/واکشی کاربر
-    user, created = User.objects.get_or_create(
-        phone=phone, defaults={"username": phone, "is_staff": False}
-    )
-
-    # ساخت توکن
-    refresh = RefreshToken.for_user(user)
-
-    # حذف OTP
-    otp_obj.delete()
-
-    # آماده‌سازی پاسخ JSON (اطلاعات کاربر و نقش)
-    role = "admin" if user.is_staff else "customer"
-    response = JsonResponse(
-        {
-            "status": "ok",
-            "message": "ورود موفق",
-            "user": {
-                "id": user.id,
-                "phone": user.phone,
-                "username": user.username,
-                "role": role,
-            },
-        }
-    )
-
-    # ست کوکی‌ها
-    _set_jwt_cookies(response, refresh)
-    return response
-
-
-@csrf_exempt
-def login_user(request):
-    """
-    لاگین با phone + password (جا داره از email هم استفاده کنی)
-    """
-    if request.method != "POST":
-        return JsonResponse(
-            {"status": "error", "message": "Method not allowed"}, status=405
-        )
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
-
-    phone = data.get("phone")
-    password = data.get("password")
-    if not phone or not password:
-        return JsonResponse(
-            {"status": "error", "message": "phone و password لازم است"}, status=400
-        )
-
-    user = authenticate(request, username=phone, password=password)
-    if user is None:
-        return JsonResponse(
-            {"status": "error", "message": "اطلاعات ورود نامعتبر است"}, status=401
-        )
-
-    refresh = RefreshToken.for_user(user)
-    response = JsonResponse(
-        {
-            "status": "ok",
-            "message": "ورود موفق",
-            "user": {
-                "id": user.id,
-                "phone": user.phone,
-                "role": "admin" if user.is_staff else "customer",
-            },
-        }
-    )
-    _set_jwt_cookies(response, refresh)
-    return response
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def check_auth(request):
-
-    user = request.user
-    role = "admin" if getattr(user, "is_staff", False) else "customer"
-    return JsonResponse(
-        {
-            "isAuthenticated": True,
-            "user": {
-                "id": user.id,
-                "phone": user.phone,
-                "username": user.username,
-                "role": role,
-            },
-        }
-    )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CookieJWTAuthentication(JWTAuthentication):
