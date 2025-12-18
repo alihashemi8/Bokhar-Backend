@@ -165,22 +165,25 @@ class LogOutView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
-        # حذف کوکی‌ها
-        response = Response(
-            {"status": "ok", "message": "خروج انجام شد"}, status=status.HTTP_200_OK
-        )
+       try:
 
-        # اسم کوکی‌ها
-        access_token_cookie_name = settings.SIMPLE_JWT.get("AUTH_COOKIE", "access")
-        refresh_token_cookie_name = settings.SIMPLE_JWT.get(
-            "AUTH_COOKIE_REFRESH", "refresh"
-        )
+           refresh_token_cookie_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh")
+           refresh = request.COOKIES.get(refresh_token_cookie_name)
+           if refresh:
+               token = RefreshToken(refresh)
+               token.blacklist()
+       except Exception :
+           pass
+
+       response = Response({
+           "status":"خروج انجام شد"
+       },status=status.HTTP_200_OK)
 
         # حذف کوکی‌ها با اسم
-        response.delete_cookie(access_token_cookie_name, path="/")
-        response.delete_cookie(refresh_token_cookie_name, path="/")
+       response.delete_cookie(settings.SIMPLE_JWT.get("AUTH_COOKIE", "access"), path="/")
+       response.delete_cookie(settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh"), path="/")
 
-        return response
+       return response
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -223,7 +226,7 @@ class VerifyTokenView(APIView):
         access_token_jwt = settings.SIMPLE_JWT.get("AUTH_COOKIE", "access")
         access_token_cookie = request.COOKIES.get(access_token_jwt)
         if access_token_cookie is None:
-            return Response({"detail": "ارور"}, status=400)
+            return Response({"detail": "ارور"}, status=401)
         try:
             AccessToken(access_token_cookie)
             return Response({"detail": "توکن معتبر"}, status=200)
