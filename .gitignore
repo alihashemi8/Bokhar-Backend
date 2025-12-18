@@ -58,3 +58,7 @@ Thumbs.db
 # Optional: compiled assets
 *.pyc
 *.pyo
+
+__pycache__/
+*.py[cod]
+*.so
