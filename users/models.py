@@ -6,11 +6,9 @@ from django.utils import timezone
 # این کلاس برای ساختن کاربر جدید یا ادمین جدید
 class UserManager(BaseUserManager):
 
-    def create_user(self, phone, fullname, password):
+    def create_user(self, phone, fullname, password=None):
         if not phone:
             raise ValueError("لطفا شماره موبایل خود را وارد کنید.")
-        if not password:
-            raise ValueError("لطفا رمز خود را وارد کنید.")
         user = self.model(fullname=fullname, phone=phone)
         user.set_password(password)
         user.save(using=self._db)
@@ -59,26 +57,6 @@ import hashlib
 
 from django.db import models
 from django.utils import timezone
-
-
-class OTP(models.Model):
-    phone = models.CharField(max_length=11, db_index=True)  # db_index برای سریعتر شدن
-    otp_hash = models.CharField(max_length=64)  # sha256 hex
-    created_at = models.DateTimeField(auto_now_add=True)
-    attempts = models.IntegerField(default=0)
-
-    def is_expired(self):
-        return timezone.now() > self.created_at + timezone.timedelta(minutes=5)
-
-    @staticmethod
-    def hash_otp(code: str):
-        return hashlib.sha256(code.encode()).hexdigest()
-
-    def __str__(self):
-        return f"OTP for {self.phone} ({self.created_at})"
-
-
-from django.db import models
 
 
 class UserProfile(models.Model):

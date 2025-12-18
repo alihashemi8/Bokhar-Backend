@@ -1,33 +1,66 @@
 import random
 
-from django.utils import timezone
+from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
+from django.core.cache import cache
 
-from .models import OTP
-
-RESEND_INTERVAL_SECONDS = 60
+OTP_EXPIRE = 120
 
 
-def create_and_save_otp(phone, resend=False):
-    now = timezone.now()
-    latest_otp = OTP.objects.filter(phone=phone).order_by("-created_at").first()
+def generateOTP(phone):
+    code = random.randint(100000, 999999)
+    cache.set(
+        f"otp:{phone}",
+        make_password(str(code)),  # make به صورت هش شده ذخیره میشه
+        timeout=OTP_EXPIRE,
+    )
+    return code
 
-    if latest_otp:
-        if not latest_otp.is_expired() and resend:
-            # بررسی فاصله زمانی resend
-            elapsed = (now - latest_otp.created_at).total_seconds()
-            if elapsed < RESEND_INTERVAL_SECONDS:
-                raise Exception(
-                    f"لطفاً {int(RESEND_INTERVAL_SECONDS - elapsed)} ثانیه صبر کنید قبل از درخواست مجدد OTP"
-                )
-            # حذف OTP قدیمی قبل از ایجاد OTP جدید
-            latest_otp.delete()
 
-    # ساخت OTP جدید
-    otp_plain = str(random.randint(100000, 999999))
-    otp_hash = OTP.hash_otp(otp_plain)
+# قبل ارسال OTP
+def can_send_otp(phone):
+    key = f"otp_limit:{phone}"
+    count = cache.get(key, 0)
 
-    OTP.objects.create(phone=phone, otp_hash=otp_hash)
+    if count >= 5:
+        ttl = cache.ttl(key) or 0  # زمان باقی‌مانده بر حسب ثانیه
+        return False, ttl
 
-    # ارسال پیامک یا لاگ کردن برای تست
-    print(f"OTP for {phone}: {otp_plain}")  # تست در کنسول
-    return otp_plain
+    cache.set(key, count + 1, timeout=180)  # 3 دقیقه
+    return True, 0
+
+
+# برای بلاک شماره
+def is_phone_blocked(phone):
+    key = f"otp_block:{phone}"
+    blocked = cache.get(key) is not None
+    ttl = cache.ttl(key) or 0  # زمان باقی‌مانده بر حسب ثانیه
+    return blocked, ttl
+
+
+# ثبت تلاش ناموفق
+def register_failed_attempt(phone):
+    key = f"otp_fail:{phone}"
+    fails = cache.get(key, 0)
+
+    if fails >= 5:
+        cache.set(f"otp_block:{phone}", True, timeout=180)
+        ttl = cache.ttl(f"otp_block:{phone}") or 0
+        cache.delete(key)  # ریست شمارنده خطا
+        return True, ttl  # شماره بلاک شد
+
+    cache.set(key, fails + 1, timeout=180)
+    return False, 0
+
+
+def verify_otp(phone, code):
+    saved_hash = cache.get(f"otp:{phone}")
+
+    if not saved_hash:
+        return False
+
+    if check_password(str(code), saved_hash):
+        cache.delete(f"otp:{phone}")  # OTP یک‌بار مصرف
+        return True
+
+    return False

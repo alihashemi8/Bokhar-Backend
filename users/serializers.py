@@ -4,6 +4,7 @@ from django.contrib.auth import authenticate
 from rest_framework import serializers
 
 from .models import User
+from .utils import *
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -12,47 +13,118 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ["fullname", "phone", "id"]
 
 
-class RegisterSerializer(serializers.ModelSerializer):
+class SendOTPSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=11)
 
-    class Meta:
-        model = User
-        fields = ["fullname", "phone", "password"]
-        extra_kwargs = {"password": {"write_only": True}}
+    def validate(self, attrs):
+        phone = attrs["phone"]
+        can_send, remaining = can_send_otp(phone)
 
-    def validate(
-        self, attrs
-    ):  # برای چک کردن پسورد = پسورد حداقل 6حرفی و شامل حروف و عدد باشد
-        password = attrs.get("password")
-        phone = attrs.get("phone")
-        if len(phone) != 11:
-            raise serializers.ValidationError({"پیام": "شماره تلفن 11 رقم است"})
-
-        if len(password) < 6:
-            raise serializers.ValidationError({"پیام": "حداقل طول رمز باید 6 باشد"})
-
-            #  حداقل یک عدد و حروف
-        if not re.search(r"\d", password) and not re.search(r"[A-Z]", password):
+        if not can_send:
+            minutes, seconds = divmod(remaining, 60)
             raise serializers.ValidationError(
-                {"پیام": "رمز باید حداقل شامل یک عدد و حروف باشد"}
+                {
+                    "پیام": f"شما بیش از حد درخواست دادید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
+                }
             )
 
         return attrs
 
-    # ساختن کاربر جدید
+
+# OTP
+class RegisterOTPSerializer(serializers.Serializer):
+    phone = serializers.CharField()
+    fullname = serializers.CharField()
+    otp = serializers.CharField()
+
+    def validate(self, attrs):
+        phone = attrs.get("phone")
+        otp = attrs.get("otp")
+
+        # اعتبار شماره
+        if not phone or len(phone) != 11:
+            raise serializers.ValidationError({"phone": "شماره تلفن باید ۱۱ رقم باشد"})
+
+        # بررسی بلاک بودن
+        blocked, remaining = is_phone_blocked(phone)
+        if blocked:
+            minutes, seconds = divmod(remaining, 60)
+            raise serializers.ValidationError(
+                {
+                    "پیام": f"شما بیش از حد درخواست دادید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
+                }
+            )
+
+        # بررسی OTP
+        if not verify_otp(phone, otp):
+            blocked, remaining = register_failed_attempt(phone)
+            if blocked:
+                minutes, seconds = divmod(remaining, 60)
+                raise serializers.ValidationError(
+                    {
+                        "پیام": f"شما بیش از حد تلاش کردید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
+                    }
+                )
+            raise serializers.ValidationError({"otp": "کد وارد شده اشتباه است"})
+
+        cache.delete(f"otp_fail:{phone}")
+        return attrs
+
     def create(self, validated_data):
-        phone = validated_data.get("phone")  # نیازی نیست داخل پایگاه داده ذخیره بشه
+        phone = validated_data.get("phone")
         user = User.objects.filter(phone=phone)
         if user.exists():
             raise serializers.ValidationError({"پیام": "قبلا ثبت نام کرده ای"})
         user = User.objects.create_user(
             phone=phone,
             fullname=validated_data["fullname"],
-            password=validated_data["password"],
         )
         return user
 
 
-class LoginSerializer(serializers.Serializer):
+class LoginOTPSerializer(serializers.Serializer):
+    phone = serializers.CharField()
+    otp = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        phone = attrs.get("phone")
+        otp = attrs.get("otp")
+
+        try:
+            user = User.objects.get(phone=phone)
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                {"پیام": "شماره اشتباه است یا ثبت نام نکردی"}
+            )
+
+        # بررسی بلاک بودن
+        blocked, remaining = is_phone_blocked(phone)
+        if blocked:
+            minutes, seconds = divmod(remaining, 60)
+            raise serializers.ValidationError(
+                {
+                    "پیام": f"شما بیش از حد تلاش کردید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
+                }
+            )
+
+        # بررسی OTP
+        if not verify_otp(phone, otp):
+            blocked, remaining = register_failed_attempt(phone)
+            if blocked:
+                minutes, seconds = divmod(remaining, 60)
+                raise serializers.ValidationError(
+                    {
+                        "پیام": f"شما بیش از حد تلاش کردید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
+                    }
+                )
+            raise serializers.ValidationError({"otp": "کد وارد شده اشتباه است"})
+
+        attrs["user"] = user
+        cache.delete(f"otp_fail:{phone}")
+        return attrs
+
+
+class LoginPasswordSerializer(serializers.Serializer):
     phone = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
@@ -71,6 +143,54 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
-class OTPVerifySerializer(serializers.Serializer):
-    phone = serializers.CharField()
-    otp = serializers.CharField(max_length=6)
+class EditFullNameSerializer(serializers.Serializer):
+    fullname = serializers.CharField()
+
+    def update(self, instance, validated_data):
+        instance.fullname = validated_data.get("fullname")
+        instance.save()
+        return instance
+
+
+class EditPasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=False)
+    password = serializers.CharField(write_only=True, required=True)
+    password2 = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        password = attrs.get("password")
+        if user.has_usable_password():
+            if not attrs.get("old_password"):
+                raise serializers.ValidationError(
+                    {"old_password": "رمز عبور فعلی را وارد کنید"}
+                )
+            if not user.check_password(attrs["old_password"]):
+                raise serializers.ValidationError(
+                    {"old_password": "رمز عبور فعلی اشتباه است"}
+                )
+
+        if len(password) < 6:
+            raise serializers.ValidationError({"password": "حداقل طول رمز 6 حرف است"})
+
+        rules = [
+            re.search(r"\d", password),
+            re.search(r"[A-Z]", password),
+            re.search(r"[a-z]", password),
+        ]
+        if not all(rules):
+            raise serializers.ValidationError(
+                {"password": "رمز حداقل 1 حروف بزرگ و کوچک و حداقل 1 عدد"}
+            )
+
+        if attrs.get("password") != attrs.get("password2"):
+            raise serializers.ValidationError(
+                {"password2": "رمز عبور و تکرار آن یکسان نیست"}
+            )
+
+        return attrs
+
+    def update(self, instance, validated_data):
+        instance.set_password(validated_data["password"])
+        instance.save()
+        return instance
