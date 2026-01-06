@@ -28,6 +28,9 @@ INSTALLED_APPS = [
     "django_celery_results",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    # "wallet",
+    "product",
+    "order"
 ]
 
 MIDDLEWARE = [
@@ -150,6 +153,7 @@ LOGGING = {
         "level": "DEBUG",
     },
 }
+
 # cache
 CACHES = {
     "default": {
@@ -161,3 +165,9 @@ CACHES = {
 CELERY_BROKER_URL = config("CELERY_BROKER_URL")  # برای ادرس سلری
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+USE_TZ = True
+TIME_ZONE = "Asia/Tehran"
