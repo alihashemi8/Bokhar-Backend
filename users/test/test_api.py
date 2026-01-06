@@ -49,7 +49,6 @@ def test_login_password(api_client):
 @pytest.mark.django_db
 def test_register_otp(api_client):
 
-
     phone = "09125558817"
     cache.set(f"otp:{phone}", make_password("123456"), timeout=120)
     url = reverse("users:register")

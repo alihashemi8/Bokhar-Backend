@@ -112,12 +112,15 @@ class LoginOTPView(APIView):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data["user"]
+
             refresh = RefreshToken.for_user(user)
+
             response = Response(
                 {
                     "phone": user.phone,
                     "fullname": user.fullname,
                     "user": user.is_admin,
+                    "role": user.role,
                     "message": "خوش امدید",
                 },
                 status=200,
@@ -142,6 +145,7 @@ class LoginPasswordView(APIView):
                     "phone": user.phone,
                     "fullname": user.fullname,
                     "user": user.is_admin,
+                    "role": user.role,
                     "message": "خوش امدید",
                 },
                 status=200,
@@ -155,8 +159,10 @@ class LoginPasswordView(APIView):
 
 from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.token_blacklist.models import (BlacklistedToken,
-                                                             OutstandingToken)
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
 from rest_framework_simplejwt.tokens import RefreshToken
 
 
@@ -165,25 +171,29 @@ class LogOutView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
-       try:
+        try:
 
-           refresh_token_cookie_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh")
-           refresh = request.COOKIES.get(refresh_token_cookie_name)
-           if refresh:
-               token = RefreshToken(refresh)
-               token.blacklist()
-       except Exception :
-           pass
+            refresh_token_cookie_name = settings.SIMPLE_JWT.get(
+                "AUTH_COOKIE_REFRESH", "refresh"
+            )
+            refresh = request.COOKIES.get(refresh_token_cookie_name)
+            if refresh:
+                token = RefreshToken(refresh)
+                token.blacklist()
+        except Exception:
+            pass
 
-       response = Response({
-           "status":"خروج انجام شد"
-       },status=status.HTTP_200_OK)
+        response = Response({"status": "خروج انجام شد"}, status=status.HTTP_200_OK)
 
         # حذف کوکی‌ها با اسم
-       response.delete_cookie(settings.SIMPLE_JWT.get("AUTH_COOKIE", "access"), path="/")
-       response.delete_cookie(settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh"), path="/")
+        response.delete_cookie(
+            settings.SIMPLE_JWT.get("AUTH_COOKIE", "access"), path="/"
+        )
+        response.delete_cookie(
+            settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh"), path="/"
+        )
 
-       return response
+        return response
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -241,11 +251,11 @@ class EditFullNameView(APIView):
     def put(self, request):
         user = request.user
         serializer = self.serializer_class(
-            user, data=request.data, context={"request": request}
+            user, data=request.data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
             serializer.save()
-            return Response({"detail": "اطلاعات با موفقیت بروزرسانی شد"})
+            return Response({"detail": "نام با موفقیت بروزرسانی شد"})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -256,12 +266,11 @@ class EditPasswordView(APIView):
     def put(self, request):
         user = request.user
         serializer = self.serializer_class(
-            user, data=request.data, context={"request": request}
+            user, data=request.data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
             serializer.save()
-            return Response({"detail": "اطلاعات با موفقیت بروزرسانی شد"})
-
+            return Response({"detail": "رمز عبور با موفقیت تغییر کرد"})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

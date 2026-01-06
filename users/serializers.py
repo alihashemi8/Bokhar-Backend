@@ -194,3 +194,5 @@ class EditPasswordSerializer(serializers.Serializer):
         instance.set_password(validated_data["password"])
         instance.save()
         return instance
+
+

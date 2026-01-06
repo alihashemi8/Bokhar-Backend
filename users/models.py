@@ -31,6 +31,7 @@ class User(AbstractBaseUser):
     fullname = models.CharField(max_length=100)
     phone = models.CharField(max_length=11, unique=True)
     is_admin = models.BooleanField(default=False)
+    role = models.CharField(default="user")
 
     REQUIRED_FIELDS = ["fullname"]  # سوپر یوزر برای
     USERNAME_FIELD = "phone"  # بر چه اساسی کاربر وارد شه
@@ -52,18 +53,9 @@ class User(AbstractBaseUser):
     def is_staff(self):
         return self.is_admin
 
-
-import hashlib
-
-from django.db import models
-from django.utils import timezone
-
-
-class UserProfile(models.Model):
-    full_name = models.CharField(max_length=255)
-    phone = models.CharField(max_length=15, unique=True)
-    email = models.EmailField(unique=True, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.full_name} ({self.phone})"
+class Address(models.Model):
+    street = models.CharField(max_length=250)
+    city = models.CharField(max_length=50)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    title = models.CharField(max_length=100)
+    postcode = models.CharField(max_length=20)
