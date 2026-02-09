@@ -15,13 +15,9 @@ class Category(models.Model):
 
 
 class Size(models.Model):
-
-    length = models.PositiveIntegerField(null=True, blank=True)
-    width = models.PositiveIntegerField(null=True, blank=True)
+    meter = models.IntegerField(null=True, blank=True)
     single_double = models.IntegerField(null=True, blank=True)
 
-    def __str__(self):
-        return f"{self.width},{self.length}"
 
 
 class Product(models.Model):
@@ -30,10 +26,11 @@ class Product(models.Model):
     category = models.ForeignKey(
         Category, on_delete=models.CASCADE, related_name="products"
     )
-    sizes = models.ManyToManyField(Size, blank=True, related_name="products")
+    size = models.ForeignKey(Size,on_delete=models.CASCADE,null = True, blank=True, related_name="products")
     material = models.CharField(max_length=100)
     image = models.ImageField(upload_to="products/", null=True, blank=True)
-    price = models.PositiveIntegerField()
+    price_meter =  models.IntegerField(null=True, blank=True)
+    price = models.PositiveIntegerField(null=True, blank=True)
     # برای کد تخفبف  درصد
     discount_percent = models.PositiveIntegerField(null=True, blank=True)
     expiration_date = models.DateTimeField(null=True, blank=True)
@@ -45,10 +42,19 @@ class Product(models.Model):
     def __str__(self):
         return f"{self.name},{self.category}"
 
-    @property  # مثل یک فیلد عمل میکند.
+    def save(self, *args, **kwargs):
+        # فقط اگر محصول متری و size موجود است
+        if self.price_meter is not None and self.size and self.size.meter:
+            self.price = int(self.price_meter * self.size.meter)
+        super().save(*args, **kwargs)
+
+    @property
     def new_price(self):
-        if self.expiration_date and self.expiration_date > timezone.now():
-            new_price = self.price * (100 - self.discount_percent) / 100
-            return new_price
-        else:
-            return self.price
+        if (
+                self.price
+                and self.discount_percent
+                and self.expiration_date
+                and self.expiration_date > timezone.now()
+        ):
+            return int(self.price * (100 - self.discount_percent) / 100)
+        return self.price

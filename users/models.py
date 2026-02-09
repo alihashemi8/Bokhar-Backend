@@ -53,9 +53,13 @@ class User(AbstractBaseUser):
     def is_staff(self):
         return self.is_admin
 
+
 class Address(models.Model):
-    street = models.CharField(max_length=250)
+    address = models.CharField(max_length=250)
     city = models.CharField(max_length=50)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=100)
-    postcode = models.CharField(max_length=20)
+    postcode = models.IntegerField(max_length=20)
+    apartment_name = models.CharField(max_length=100)
+    unit = models.IntegerField(max_length=3)
+    # ostan

@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -9,7 +10,6 @@ from .models import *
 from .permission import *
 from .serializers import *
 
-from django.db.models import Q
 
 class ProductListView(APIView):
     permission_classes = [IsSeller]
@@ -80,10 +80,10 @@ class ProductSearchView(APIView):
             return Response({"detail": "پارامتر q ارسال نشده"}, status=400)
 
         products = Product.objects.filter(
-            Q(name__icontains=q) |
-            Q(service_type__icontains=q) |
-            Q(category__name__icontains=q),
-            is_verified=True
+            Q(name__icontains=q)
+            | Q(service_type__icontains=q)
+            | Q(category__name__icontains=q),
+            is_verified=True,
         )
 
         serializer = ProductSerializer(products, many=True)
