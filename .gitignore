@@ -62,3 +62,15 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 *.so
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Django
+db.sqlite3
+
+# Virtualenv
+venv/
+.env

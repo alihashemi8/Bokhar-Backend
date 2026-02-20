@@ -2,22 +2,21 @@ version: '3.8'
 
 services:
   drf:
-    build : .
-    command : python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - . :/app
+    build: .
     ports:
       - "8000:8000"
+    volumes:
+      - .:/app
     depends_on:
       - redis
 
-
   redis:
-    image: redis:7.1.0
-
+    image: redis:7
 
   celery:
     build: .
     command: celery -A bokhar worker --loglevel=info
+    volumes:
+      - .:/app
     depends_on:
       - redis
