@@ -165,19 +165,15 @@ class LoginPasswordView(APIView):
 # Logout / Refresh
 # ------------------------------------------------------------------
 
-@method_decorator(csrf_protect, name="dispatch")
 class LogOutView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
-        response = Response(
-            {"detail": "خروج با موفقیت انجام شد"},
-            status=status.HTTP_200_OK,
-        )
+        response = Response({"detail": "خروج با موفقیت انجام شد"}, status=200)
 
+        # blacklist refresh token
         refresh_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh")
         refresh_token = request.COOKIES.get(refresh_name)
-
         if refresh_token:
             try:
                 token = RefreshToken(refresh_token)
@@ -188,7 +184,9 @@ class LogOutView(APIView):
         response.delete_cookie(settings.SIMPLE_JWT.get("AUTH_COOKIE", "access"), path="/")
         response.delete_cookie(refresh_name, path="/")
 
+
         return response
+
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -207,11 +205,22 @@ class RefreshTokenView(APIView):
 
         try:
             old_refresh = RefreshToken(old_refresh_token)
+
+            # بررسی blacklist
+            if old_refresh.blacklisted:  # <-- اضافه کن
+                return Response(
+                    {"detail": "نشست شما منقضی شده است"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
             user = User.objects.get(id=old_refresh["user_id"])
             new_refresh = RefreshToken.for_user(user)
 
-            if settings.SIMPLE_JWT.get("BLACKLIST_AFTER_ROTATION", False):
-                old_refresh.blacklist()
+            try:
+                old_refresh.check_blacklist()
+            except TokenError:
+                return Response({"detail": "نشست شما منقضی شده است"}, status=401)
+
 
             response = Response(
                 {"detail": "توکن نوسازی شد"},
@@ -225,6 +234,7 @@ class RefreshTokenView(APIView):
                 {"detail": "اعتبارنامه نامعتبر است"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+
 
 
 # ------------------------------------------------------------------

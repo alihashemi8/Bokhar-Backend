@@ -1,12 +1,28 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
 class CookieJWTAuthentication(JWTAuthentication):
     def authenticate(self, request):
-        # گرفتن access token از cookie
-        raw_token = request.COOKIES.get("access")
+        raw_access = request.COOKIES.get("access")
+        raw_refresh = request.COOKIES.get("refresh")
 
-        if raw_token is None:
+        if not raw_access:
             return None
 
-        validated_token = self.get_validated_token(raw_token)
-        return self.get_user(validated_token), validated_token
+        try:
+            validated_access = self.get_validated_token(raw_access)
+        except TokenError:
+            # AccessToken منقضی شده
+            return None
+
+        # بررسی blacklist روی refresh
+        if raw_refresh:
+            try:
+                refresh_token = RefreshToken(raw_refresh)
+                if getattr(refresh_token, "blacklisted", False):
+                    return None
+            except TokenError:
+                return None
+
+        return self.get_user(validated_access), validated_access
