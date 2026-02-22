@@ -15,4 +15,5 @@ urlpatterns = [
     path("refresh/",  views.RefreshTokenView.as_view(), name="refresh"),
     path("verify/", views.VerifyTokenView.as_view(), name="verify"),
     path("logout/", views.LogOutView.as_view(), name="logout"),
+    path("csrf/", get_csrf_token, name="get-csrf-token"),
 ]

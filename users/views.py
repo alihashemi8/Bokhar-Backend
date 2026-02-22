@@ -4,6 +4,7 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from rest_framework import status
 from rest_framework.views import APIView
@@ -285,3 +286,7 @@ class EditPasswordView(APIView):
             return Response({"detail": "رمز عبور با موفقیت تغییر کرد"})
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    return JsonResponse({'detail': 'CSRF cookie set'})
