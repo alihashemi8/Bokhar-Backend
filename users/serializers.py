@@ -28,9 +28,16 @@ def safe_divmod(seconds):
 # User
 # ------------------------
 class UserSerializer(serializers.ModelSerializer):
+    has_password = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["fullname", "phone", "id"]
+        fields = ["id", "fullname", "phone", "has_password"]
+
+    def get_has_password(self, obj):
+        return obj.has_usable_password()
+
+
 
 
 # ------------------------
@@ -237,3 +244,4 @@ class EditPasswordSerializer(serializers.Serializer):
         instance.set_password(validated_data["password"])
         instance.save()
         return instance
+

@@ -259,7 +259,6 @@ class EditFullNameView(APIView):
         serializer = self.serializer_class(
             request.user,
             data=request.data,
-            partial=True,
             context={"request": request},
         )
         if serializer.is_valid():
