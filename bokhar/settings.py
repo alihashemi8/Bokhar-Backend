@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "users",
+    'products',
     "notifications",
     "django_celery_results",
     "rest_framework_simplejwt",
@@ -117,7 +118,7 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "users.authentication.CookieJWTAuthentication",
+        "users.authenticate.CookieJWTAuthentication",
     ],
 }
 
