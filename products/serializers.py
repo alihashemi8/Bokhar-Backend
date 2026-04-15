@@ -17,7 +17,7 @@ class MaterialPriceSerializer(serializers.ModelSerializer):
 # ----------------------------------------------------
 class PricingTabSerializer(serializers.ModelSerializer):
     material_prices = MaterialPriceSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = ProductPricingTab
         fields = ['tab_name', 'size_type', 'material_prices']
@@ -33,73 +33,84 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 # ----------------------------------------------------
-# Product List (برای لیست ساده)
+# Product List
 # ----------------------------------------------------
 class ProductListSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
-    
+
     class Meta:
         model = Product
         fields = ['id', 'title', 'category', 'status', 'image', 'base_price']
 
 
 # ----------------------------------------------------
-# Product Detail (GET /products/<id>)
+# Product Detail
 # ----------------------------------------------------
 class ProductDetailSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     pricing = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Product
-        fields = ['id', 'title', 'category', 'status', 'image', 'base_price', 'pricing', 'created_at']
-    
+        fields = [
+            'id',
+            'title',
+            'category',
+            'status',
+            'image',
+            'base_price',
+            'pricing',
+            'created_at'
+        ]
+
     def get_pricing(self, obj):
         pricing_data = {}
+
         for tab in obj.pricing_tabs.all():
+            materials = tab.material_prices.all()
+            if not materials.exists():
+                continue
+
             pricing_data[tab.tab_name] = {
                 'sizeType': tab.size_type,
                 'materialPrices': [
-                    {'material': mp.material, 'price': mp.price}
-                    for mp in tab.material_prices.all()
+                    {'material': m.material, 'price': m.price}
+                    for m in materials
                 ]
             }
+
         return pricing_data
 
 
-
 # ----------------------------------------------------
-# Product Create / Update (POST - PUT)
+# Product Create / Update
 # ----------------------------------------------------
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):
     pricing = serializers.JSONField(write_only=True)
-    
+
     class Meta:
         model = Product
-        fields = ['id', 'title', 'category', 'status', 'image', 'base_price', 'pricing']
-    
+        fields = [
+            'id',
+            'title',
+            'category',
+            'status',
+            'image',
+            'base_price',
+            'pricing'
+        ]
 
     # -----------------------------
     # CREATE
     # -----------------------------
     def create(self, validated_data):
-        pricing_raw = validated_data.pop('pricing', None)
+        pricing_raw = validated_data.pop('pricing', {})
         product = Product.objects.create(**validated_data)
 
-        # اگر فرانت رشته JSON فرستاده باشد → به dict تبدیل کن
-        if pricing_raw is not None:
-            if isinstance(pricing_raw, str):
-                try:
-                    pricing_data = json.loads(pricing_raw)
-                except json.JSONDecodeError:
-                    raise serializers.ValidationError({"pricing": "فرمت JSON نامعتبر است"})
-            else:
-                pricing_data = pricing_raw
-
-            self._create_pricing(product, pricing_data)
+        pricing_data = self._parse_pricing(pricing_raw)
+        self._create_pricing(product, pricing_data)
 
         return product
-
 
     # -----------------------------
     # UPDATE
@@ -107,33 +118,48 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         pricing_raw = validated_data.pop('pricing', None)
 
-        # آپدیت فیلدهای معمولی
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # اگر pricing آپدیت شده
         if pricing_raw is not None:
             instance.pricing_tabs.all().delete()
-
-            if isinstance(pricing_raw, str):
-                try:
-                    pricing_data = json.loads(pricing_raw)
-                except json.JSONDecodeError:
-                    raise serializers.ValidationError({"pricing": "فرمت JSON نامعتبر است"})
-            else:
-                pricing_data = pricing_raw
-
+            pricing_data = self._parse_pricing(pricing_raw)
             self._create_pricing(instance, pricing_data)
 
         return instance
 
+    # -----------------------------
+    # PARSE PRICING JSON
+    # -----------------------------
+    def _parse_pricing(self, pricing_raw):
+        if isinstance(pricing_raw, str):
+            try:
+                return json.loads(pricing_raw)
+            except json.JSONDecodeError:
+                raise serializers.ValidationError({
+                    "pricing": "فرمت JSON نامعتبر است"
+                })
+
+        if not isinstance(pricing_raw, dict):
+            raise serializers.ValidationError({
+                "pricing": "فرمت قیمت‌گذاری نامعتبر است"
+            })
+
+        return pricing_raw
 
     # -----------------------------
-    # CREATE PRICING TABS + MATERIAL PRICES
+    # CREATE PRICING TABS + MATERIALS
     # -----------------------------
     def _create_pricing(self, product, pricing_data):
+
         for tab_name, tab_data in pricing_data.items():
+
+            material_prices = tab_data.get('materialPrices') or {}
+
+            # ⛔️ اگر هیچ جنس قیمت‌گذاری نشده → تب نساز
+            if not isinstance(material_prices, (dict, list)) or len(material_prices) == 0:
+                continue
 
             pricing_tab = ProductPricingTab.objects.create(
                 product=product,
@@ -141,27 +167,33 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
                 size_type=tab_data.get('sizeType', '')
             )
 
-            material_prices = tab_data.get('materialPrices', {})
-
-            # حالت آرایه (فرانت)
+            # آرایه
             if isinstance(material_prices, list):
                 for item in material_prices:
-                    MaterialPrice.objects.create(
-                        pricing_tab=pricing_tab,
-                        material=item.get("material"),
-                        price=int(item.get("price", 0))
-                    )
+                    material = item.get("material")
+                    price = item.get("price")
 
-            # حالت دیکشنری (اگر جایی لازم شد)
-            elif isinstance(material_prices, dict):
-                for material, price in material_prices.items():
+                    if not material or price in [None, "", 0, "0"]:
+                        continue
+
                     MaterialPrice.objects.create(
                         pricing_tab=pricing_tab,
                         material=material,
-                        price=int(price) if price else 0
+                        price=int(price)
                     )
 
+            # دیکشنری
+            elif isinstance(material_prices, dict):
+                for material, price in material_prices.items():
 
+                    if price in [None, "", 0, "0"]:
+                        continue
+
+                    MaterialPrice.objects.create(
+                        pricing_tab=pricing_tab,
+                        material=material,
+                        price=int(price)
+                    )
 
     # -----------------------------
     # VALIDATION
@@ -170,32 +202,30 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError("فرمت قیمت‌گذاری نامعتبر است")
 
-        if len(value) == 0:
-            raise serializers.ValidationError("حداقل یک تب قیمت‌گذاری باید پر شود")
+        has_any_valid_tab = False
 
         for tab_name, tab_data in value.items():
-            if not isinstance(tab_data, dict):
-                raise serializers.ValidationError(f"داده تب {tab_name} نامعتبر است")
+            material_prices = tab_data.get('materialPrices', {})
 
-            material_prices = tab_data.get('materialPrices')
+            if isinstance(material_prices, dict):
+                valid_prices = [
+                    p for p in material_prices.values()
+                    if p not in [None, "", 0, "0"]
+                ]
+                if valid_prices:
+                    has_any_valid_tab = True
 
-            # حالت آرایه
-            if isinstance(material_prices, list):
-                if len(material_prices) == 0:
-                    raise serializers.ValidationError(
-                        f"حداقل یک جنس برای تب «{tab_name}» انتخاب کنید"
-                    )
+            elif isinstance(material_prices, list):
+                valid_prices = [
+                    item.get("price") for item in material_prices
+                    if item.get("price") not in [None, "", 0, "0"]
+                ]
+                if valid_prices:
+                    has_any_valid_tab = True
 
-            # حالت دیکشنری
-            elif isinstance(material_prices, dict):
-                if len(material_prices) == 0:
-                    raise serializers.ValidationError(
-                        f"حداقل یک جنس برای تب «{tab_name}» انتخاب کنید"
-                    )
-
-            else:
-                raise serializers.ValidationError(
-                    f"فرمت materialPrices در تب «{tab_name}» نامعتبر است"
-                )
+        if not has_any_valid_tab:
+            raise serializers.ValidationError(
+                "حداقل یک تب با یک جنس قیمت‌گذاری‌شده لازم است"
+            )
 
         return value

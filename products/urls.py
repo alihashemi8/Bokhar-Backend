@@ -1,13 +1,21 @@
 # urls.py
 from django.urls import path
 from .views import *
+from .public_views import (
+    PublicCategoryListView,
+    PublicProductListView,
+    PublicProductDetailView,
+)
 
 urlpatterns = [
-    # Categories
+    # ----- PUBLIC API -----
+    path("public/categories/", PublicCategoryListView.as_view(), name="public-category-list"),
+    path("public/products/", PublicProductListView.as_view(), name="public-product-list"),
+    path("public/products/<int:pk>/", PublicProductDetailView.as_view(), name="public-product-detail"),
+
+    # ----- ADMIN API (فعلی تو) -----
     path("categories/", CategoryListView.as_view(), name="category-list"),
     path("categories/<int:pk>/", CategoryDetailView.as_view(), name="category-detail"),
-    
-    # Products/Services
     path("products/", ProductListView.as_view(), name="product-list"),
     path("products/<int:pk>/", ProductDetailView.as_view(), name="product-detail"),
     path("products/create/", ProductCreateView.as_view(), name="product-create"),
