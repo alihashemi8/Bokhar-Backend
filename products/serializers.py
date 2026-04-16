@@ -229,3 +229,16 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+from discounts.utils import calculate_final_price
+
+class ProductDetailSerializer(serializers.ModelSerializer):
+    pricing = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = ("id", "title", "image", "category", "pricing")
+
+    def get_pricing(self, obj):
+        base = obj.get_pricing_dict()   # همان خروجی قبلی شما
+        return calculate_final_price(obj, base)
