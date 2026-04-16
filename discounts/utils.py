@@ -1,66 +1,111 @@
-from datetime import datetime
-from .models import ProductDiscount, GlobalDiscount
-from django.db import models
+from django.db.models import Q
+from django.utils import timezone
+from .models import ProductDiscount, GlobalDiscount, Coupon
 
-def calculate_final_price(product, pricing_dict):
-    """
-    pricing_dict = {
-        "اتو": { "materialPrices": { "نخی": 20000, ... } },
-        ...
-    }
-    """
 
-    now = datetime.now()
+# -------------------------------------------------------
+# اعمال تخفیف روی یک قیمت
+# -------------------------------------------------------
+def apply_discount(base_price, discount_type, value):
+    if discount_type == "percent":
+        return base_price - (base_price * value / 100)
+    return max(0, base_price - value)
 
-    # تخفیف‌های مربوط به محصول / دسته / تب / جنس
-    product_discounts = ProductDiscount.objects.filter(
-        is_active=True
-    ).filter(
-        models.Q(category=product.category) |
-        models.Q(product=product)
+
+# -------------------------------------------------------
+# انتخاب بهترین تخفیف از یک queryset
+# -------------------------------------------------------
+def choose_best_discount(discounts, base_price):
+    best_discount = None
+    best_price = base_price
+
+    for d in discounts:
+        new_price = apply_discount(base_price, d.type, d.value)
+        if new_price < best_price:
+            best_price = new_price
+            best_discount = d
+
+    return best_discount, best_price
+
+
+# -------------------------------------------------------
+# منطق اصلی انتخاب یک تخفیف (Single Winner)
+# -------------------------------------------------------
+def calculate_final_price(product, pricing_tab, material, user=None, coupon_code=None, order_total=None):
+    now = timezone.now()
+    base_price = material.price
+    final_price = base_price
+
+    # helper for time filters
+    time_filter = (
+        (Q(start_at__isnull=True) | Q(start_at__lte=now)) &
+        (Q(end_at__isnull=True) | Q(end_at__gte=now))
     )
 
-    # تخفیف سراسری
-    global_discount = GlobalDiscount.objects.filter(
-        is_active=True,
-        start_at__lte=now,
-        end_at__gte=now
-    ).first()
+    # ---------------------------------------------------
+    # 1) Product discount - product
+    # ---------------------------------------------------
+    p_product = ProductDiscount.objects.filter(
+        Q(product=product), Q(is_active=True), time_filter
+    )
+    best, price = choose_best_discount(p_product, final_price)
+    if best:
+        final_price = price
+        # product discount همیشه اولویت اول است → return نمی‌کنیم
+        return final_price   # چون product level همیشه winner است
 
-    result = {}
+    # ---------------------------------------------------
+    # 2) Product discount - category
+    # ---------------------------------------------------
+    p_category = ProductDiscount.objects.filter(
+        Q(category=product.category), Q(is_active=True), time_filter
+    )
+    best, price = choose_best_discount(p_category, final_price)
+    if best:
+        final_price = price
+        return final_price
 
-    for tab_name, tab_data in pricing_dict.items():
-        result[tab_name] = {"materialPrices": {}}
+    # ---------------------------------------------------
+    # 3) Product discount - pricing tab
+    # ---------------------------------------------------
+    p_tab = ProductDiscount.objects.filter(
+        Q(pricing_tab=pricing_tab), Q(is_active=True), time_filter
+    )
+    best, price = choose_best_discount(p_tab, final_price)
+    if best:
+        final_price = price
+        return final_price
 
-        for material, base_price in tab_data["materialPrices"].items():
-            final_price = base_price
+    # ---------------------------------------------------
+    # 4) Product discount - material
+    # ---------------------------------------------------
+    p_material = ProductDiscount.objects.filter(
+        Q(material=material), Q(is_active=True), time_filter
+    )
+    best, price = choose_best_discount(p_material, final_price)
+    if best:
+        final_price = price
+        return final_price
 
-            # 1) Product-level
-            for d in product_discounts:
+    # ---------------------------------------------------
+    # 5) Global Discount
+    # ---------------------------------------------------
+    globals_ = GlobalDiscount.objects.filter(Q(is_active=True), time_filter)
+    best, price = choose_best_discount(globals_, final_price)
+    if best:
+        final_price = price
+        return final_price
 
-                if d.material and d.material != material:
-                    continue
+    # ---------------------------------------------------
+    # 6) Coupon → باید روی final_price اعمال شود، نه base_price
+    # ---------------------------------------------------
+    if coupon_code:
+        try:
+            coup = Coupon.objects.get(code=coupon_code)
+            if coup.is_valid_now(user=user, order_total=order_total):
+                final_price = apply_discount(final_price, coup.type, coup.value)
+                return final_price
+        except Coupon.DoesNotExist:
+            pass
 
-                if d.pricing_tab and d.pricing_tab.name != tab_name:
-                    continue
-
-                if d.type == "percent":
-                    final_price -= (final_price * d.value) / 100
-                else:
-                    final_price -= d.value
-
-            # 2) Global discount
-            if global_discount:
-                if global_discount.type == "percent":
-                    final_price -= (final_price * global_discount.value) / 100
-                else:
-                    final_price -= global_discount.value
-
-            final_price = max(final_price, 0)
-
-            result[tab_name]["materialPrices"][material] = {
-                "original": base_price,
-                "final": int(final_price)
-            }
-
-    return result
+    return final_price
