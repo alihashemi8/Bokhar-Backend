@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "users",
     'products',
+    "discounts"
     "notifications",
     "django_celery_results",
     "rest_framework_simplejwt",
