@@ -43,6 +43,30 @@ class Product(models.Model):
     def __str__(self):
         return f"{self.title} - {self.category}"
 
+    # ----------------------------------------------------
+    #   🔥 متد گم‌شده — اضافه شد
+    # ----------------------------------------------------
+    def get_pricing_dict(self):
+        """
+        خروجی تمام تب‌ها + قیمت‌های جنس‌ها
+        ساختار JSON درست مطابق ورودی و خروجی frontend
+        """
+        result = {}
+
+        for tab in self.pricing_tabs.all():
+            result[tab.tab_name] = {
+                "sizeType": tab.size_type,
+                "materialPrices": [
+                    {
+                        "material": mp.material,
+                        "price": mp.price
+                    }
+                    for mp in tab.material_prices.all()
+                ]
+            }
+
+        return result
+
 
 class ProductPricingTab(models.Model):
     product = models.ForeignKey(
