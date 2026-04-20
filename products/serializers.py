@@ -2,6 +2,8 @@ from rest_framework import serializers
 from .models import Category, Product, ProductPricingTab, MaterialPrice
 from discounts.utils import calculate_final_price
 import json
+from .models import ProductPricingTab, MaterialPrice
+from discounts.models import ProductDiscount
 
 
 # ----------------------------------------------------
@@ -72,44 +74,39 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_pricing(self, obj):
-        base_pricing = obj.get_pricing_dict()
+        pricing_tabs = obj.pricing_tabs.all()
         final_output = {}
 
-        for tab_name, tab_data in base_pricing.items():
-
-            # گرفتن OBJECT رکورد تب از DB
-            pricing_tab_obj = obj.pricing_tabs.get(tab_name=tab_name)
-
-            tab_pricing = []
-
-            for item in tab_data['materialPrices']:
-                material_name = item['material']
-
-                material_obj = pricing_tab_obj.material_prices.get(material=material_name)
-
-                final_price = calculate_final_price(
-                    obj,
-                    pricing_tab_obj,
-                    material_obj
-                )
-
-                tab_pricing.append({
-                    "id": material_obj.id,              
-                    "material": material_name,
-                    "price": material_obj.price,
-                    "base_price": material_obj.price,
-                    "final_price": int(final_price),
-                })
-
-            final_output[tab_name] = {
-                "id": pricing_tab_obj.id,          
-                "sizeType": tab_data["sizeType"],
-                "materialPrices": tab_pricing,
+        for tab in pricing_tabs:
+            final_output[tab.tab_name] = {
+                "id": tab.id,
+                "sizeType": tab.size_type,
+                "materialPrices": []
             }
 
+            material_prices = getattr(tab, "material_prices", None)
+
+            if material_prices:
+                material_prices = material_prices.all()
+            else:
+                material_prices = tab.materialprice_set.all()
+
+            for mp in material_prices:
+                discount_obj = ProductDiscount.objects.filter(
+                    material=mp,
+                    is_active=True
+                ).first()
+
+                discount_amount = discount_obj.value if discount_obj else 0
+
+                final_output[tab.tab_name]["materialPrices"].append({
+                    "id": mp.id,
+                    "material": mp.material,
+                    "price": mp.price,
+                    "discount_amount": discount_amount
+                })
+
         return final_output
-
-
 
 # ----------------------------------------------------
 # Product CREATE / UPDATE
