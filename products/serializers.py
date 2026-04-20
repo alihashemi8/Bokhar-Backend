@@ -76,34 +76,39 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         final_output = {}
 
         for tab_name, tab_data in base_pricing.items():
+
+            # گرفتن OBJECT رکورد تب از DB
+            pricing_tab_obj = obj.pricing_tabs.get(tab_name=tab_name)
+
             tab_pricing = []
 
             for item in tab_data['materialPrices']:
                 material_name = item['material']
 
-                # گرفتن رکوردهای واقعی DB
-                pricing_tab_obj = obj.pricing_tabs.get(tab_name=tab_name)
                 material_obj = pricing_tab_obj.material_prices.get(material=material_name)
 
                 final_price = calculate_final_price(
-                    obj,                  # product
-                    pricing_tab_obj,      # pricing tab object
-                    material_obj          # material object
+                    obj,
+                    pricing_tab_obj,
+                    material_obj
                 )
 
                 tab_pricing.append({
+                    "id": material_obj.id,              
                     "material": material_name,
-                     "price": material_obj.price,
+                    "price": material_obj.price,
                     "base_price": material_obj.price,
                     "final_price": int(final_price),
                 })
 
             final_output[tab_name] = {
+                "id": pricing_tab_obj.id,          
                 "sizeType": tab_data["sizeType"],
                 "materialPrices": tab_pricing,
             }
 
         return final_output
+
 
 
 # ----------------------------------------------------
