@@ -7,6 +7,13 @@ class ProductDiscountSerializer(serializers.ModelSerializer):
         model = ProductDiscount
         fields = "__all__"
 
+    def validate(self, data):
+        if not data.get("material"):
+            raise serializers.ValidationError(
+                "تخفیف فقط باید روی جنس اعمال شود"
+            )
+        return data
+
 
 class GlobalDiscountSerializer(serializers.ModelSerializer):
     class Meta:

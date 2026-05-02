@@ -15,10 +15,11 @@ DISCOUNT_TYPE_CHOICES = (
 #   Product Discount  (product / category / tab / material)
 # ============================================================
 class ProductDiscount(models.Model):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, null=True, blank=True, related_name="discounts")
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True, blank=True, related_name="discounts")
-    pricing_tab = models.ForeignKey(ProductPricingTab, on_delete=models.CASCADE, null=True, blank=True, related_name="discounts")
-    material = models.ForeignKey(MaterialPrice, on_delete=models.CASCADE, null=True, blank=True, related_name="discounts")
+    material = models.ForeignKey(
+        MaterialPrice,
+        on_delete=models.CASCADE,
+        related_name="discounts"
+    )
 
     type = models.CharField(max_length=10, choices=DISCOUNT_TYPE_CHOICES)
     value = models.PositiveIntegerField()
@@ -27,16 +28,10 @@ class ProductDiscount(models.Model):
     end_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
-    class Meta:
-        indexes = [
-            models.Index(fields=['is_active']),
-            models.Index(fields=['start_at']),
-            models.Index(fields=['end_at']),
-        ]
+    def clean(self):
+        if not self.material:
+            raise ValidationError("material الزامی است")
 
-    def __str__(self):
-        target = self.product or self.category or self.pricing_tab or self.material
-        return f"ProductDiscount({target})"
 
     # --------------------------------------------------------
     # فقط یک هدف باید انتخاب شود

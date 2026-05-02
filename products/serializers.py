@@ -74,6 +74,32 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_pricing(self, obj):
+        """
+        خروجی ساختار قیمت‌گذاری با لحاظ کردن تخفیف‌ها
+        ساختار:
+        {
+          "<tab_name>": {
+             "id": <tab_id>,
+             "sizeType": "...",
+             "materialPrices": [
+                {
+                   "id": mp.id,
+                   "material": mp.material,
+                   "price": mp.price,
+                   "final_price": <after discount>,
+                   "has_discount": true/false,
+                   "discount_type": "percent"/"fixed"/null,
+                   "discount_value": int|null,
+                   "discount_scope": "material"/"pricing_tab"/"product"/"category"/"global"/"coupon"/null,
+                   "discount_start_at": datetime|null,
+                   "discount_end_at": datetime|null,
+                },
+                ...
+             ]
+          },
+          ...
+        }
+        """
         pricing_tabs = obj.pricing_tabs.all()
         final_output = {}
 
@@ -84,29 +110,41 @@ class ProductDetailSerializer(serializers.ModelSerializer):
                 "materialPrices": []
             }
 
-            material_prices = getattr(tab, "material_prices", None)
-
-            if material_prices:
-                material_prices = material_prices.all()
-            else:
-                material_prices = tab.materialprice_set.all()
+            # دسترسی به related name استاندارد
+            material_prices = tab.material_prices.all()
 
             for mp in material_prices:
-                discount_obj = ProductDiscount.objects.filter(
-                    material=mp,
-                    is_active=True
-                ).first()
+                # استفاده از منطق مرکزی تخفیف
+                final_price, discount_obj, discount_scope = calculate_final_price(
+                    product=obj,
+                    pricing_tab=tab,
+                    material=mp
+                )
 
-                discount_amount = discount_obj.value if discount_obj else 0
-
-                final_output[tab.tab_name]["materialPrices"].append({
+                data = {
                     "id": mp.id,
                     "material": mp.material,
                     "price": mp.price,
-                    "discount_amount": discount_amount
-                })
+                    "final_price": int(final_price),  # اطمینان از int بودن
+                    "has_discount": discount_obj is not None,
+                    "discount_type": None,
+                    "discount_value": None,
+                    "discount_scope": discount_scope,
+                    "discount_start_at": None,
+                    "discount_end_at": None,
+                }
+
+                if discount_obj is not None:
+                    # GlobalDiscount و ProductDiscount هر دو فیلد type/value/start/end دارند
+                    data["discount_type"] = discount_obj.type
+                    data["discount_value"] = discount_obj.value
+                    data["discount_start_at"] = discount_obj.start_at
+                    data["discount_end_at"] = discount_obj.end_at
+
+                final_output[tab.tab_name]["materialPrices"].append(data)
 
         return final_output
+
 
 # ----------------------------------------------------
 # Product CREATE / UPDATE
