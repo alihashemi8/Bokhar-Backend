@@ -54,8 +54,12 @@ def calculate_final_price(product, pricing_tab, material, **kwargs):
         .filter(
             material=material,
             is_active=True,
-            start_at__lte=now,
-            end_at__gte=now,
+        )
+        .filter(
+            Q(start_at__isnull=True) | Q(start_at__lte=now),  
+        )
+        .filter(
+            Q(end_at__isnull=True) | Q(end_at__gte=now),      
         )
         .order_by("-id")
         .first()
@@ -71,3 +75,4 @@ def calculate_final_price(product, pricing_tab, material, **kwargs):
     )
 
     return final_price, discount, "material"
+

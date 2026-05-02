@@ -28,35 +28,22 @@ class ProductDiscount(models.Model):
     end_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
-    def clean(self):
-        if not self.material:
-            raise ValidationError("material الزامی است")
-
-
     # --------------------------------------------------------
     # فقط یک هدف باید انتخاب شود
     # --------------------------------------------------------
     def clean(self):
+        # validate material exists
+        if not self.material:
+            raise ValidationError("material الزامی است")
+        
+        # validate single target
         targets = [self.product, self.category, self.pricing_tab, self.material]
         filled = [t for t in targets if t is not None]
-
+        
         if len(filled) == 0:
             raise ValidationError("حداقل یک فیلد هدف تخفیف باید مشخص شود.")
-
         if len(filled) > 1:
             raise ValidationError("تنها یک فیلد هدف تخفیف باید توسط آن پر شود.")
-
-    def is_valid_now(self):
-        now = timezone.now()
-
-        if not self.is_active:
-            return False
-        if self.start_at and now < self.start_at:
-            return False
-        if self.end_at and now > self.end_at:
-            return False
-        return True
-
 
 # ============================================================
 #   Global Discount (Single Winner among global types)

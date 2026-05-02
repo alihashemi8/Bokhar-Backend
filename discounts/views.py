@@ -43,20 +43,28 @@ class ProductDiscountViewSet(ModelViewSet):
             qs.delete()
             return Response({"deleted": True}, status=status.HTTP_200_OK)
 
+        # ✅ آماده‌سازی داده - اگر زمان ارسال نشده، پاک شود
+        data = request.data.copy()
+        if 'start_at' not in data:
+            data['start_at'] = None
+        if 'end_at' not in data:
+            data['end_at'] = None
+
         # ✅ create یا update
         discount = qs.first()
 
         if discount:
-            serializer = self.get_serializer(discount, data=request.data, partial=True)
+            serializer = self.get_serializer(discount, data=data, partial=True)
             status_code = status.HTTP_200_OK
         else:
-            serializer = self.get_serializer(data=request.data)
+            serializer = self.get_serializer(data=data)
             status_code = status.HTTP_201_CREATED
 
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
         return Response(serializer.data, status=status_code)
+
 
 # ---------------------------------------------------------
 #   GlobalDiscount
