@@ -2,8 +2,13 @@ from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.conf import settings
-from products.models import Product, Category, ProductPricingTab, MaterialPrice
 
+from products.models import (
+    Product,
+    Category,
+    ProductPricingTab,
+    MaterialPrice,
+)
 
 DISCOUNT_TYPE_CHOICES = (
     ("percent", "درصدی"),
@@ -12,13 +17,36 @@ DISCOUNT_TYPE_CHOICES = (
 
 
 # ============================================================
-#   Product Discount  (product / category / tab / material)
+# Product Discount
 # ============================================================
 class ProductDiscount(models.Model):
+    product = models.ForeignKey(
+        Product,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="discounts",
+    )
+    category = models.ForeignKey(
+        Category,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="discounts",
+    )
+    pricing_tab = models.ForeignKey(
+        ProductPricingTab,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="discounts",
+    )
     material = models.ForeignKey(
         MaterialPrice,
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
-        related_name="discounts"
+        related_name="discounts",
     )
 
     type = models.CharField(max_length=10, choices=DISCOUNT_TYPE_CHOICES)
@@ -28,43 +56,19 @@ class ProductDiscount(models.Model):
     end_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
-    # --------------------------------------------------------
-    # فقط یک هدف باید انتخاب شود
-    # --------------------------------------------------------
     def clean(self):
-        # validate material exists
-        if not self.material:
-            raise ValidationError("material الزامی است")
-        
-        # validate single target
-        targets = [self.product, self.category, self.pricing_tab, self.material]
-        filled = [t for t in targets if t is not None]
-        
-        if len(filled) == 0:
-            raise ValidationError("حداقل یک فیلد هدف تخفیف باید مشخص شود.")
-        if len(filled) > 1:
-            raise ValidationError("تنها یک فیلد هدف تخفیف باید توسط آن پر شود.")
-
-# ============================================================
-#   Global Discount (Single Winner among global types)
-# ============================================================
-class GlobalDiscount(models.Model):
-    type = models.CharField(max_length=10, choices=DISCOUNT_TYPE_CHOICES)
-    value = models.PositiveIntegerField()
-
-    start_at = models.DateTimeField(null=True, blank=True)
-    end_at = models.DateTimeField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=['is_active']),
-            models.Index(fields=['start_at']),
-            models.Index(fields=['end_at']),
+        targets = [
+            self.product,
+            self.category,
+            self.pricing_tab,
+            self.material,
         ]
+        filled = [t for t in targets if t is not None]
 
-    def __str__(self):
-        return f"GlobalDiscount {self.type} {self.value}"
+        if len(filled) == 0:
+            raise ValidationError("حداقل یک هدف تخفیف باید مشخص شود.")
+        if len(filled) > 1:
+            raise ValidationError("تنها یک هدف تخفیف می‌تواند انتخاب شود.")
 
     def is_valid_now(self):
         now = timezone.now()
@@ -76,22 +80,21 @@ class GlobalDiscount(models.Model):
             return False
         return True
 
+    def calculate_discount(self, base_price: int) -> int:
+        if self.type == "percent":
+            return (base_price * self.value) // 100
+        return min(base_price, self.value)
+
+    def __str__(self):
+        return f"ProductDiscount {self.type} {self.value}"
+
 
 # ============================================================
-#   Coupon  (Later integrated with Order)
+# Global Discount
 # ============================================================
-class Coupon(models.Model):
-    code = models.CharField(max_length=50, unique=True)
-
+class GlobalDiscount(models.Model):
     type = models.CharField(max_length=10, choices=DISCOUNT_TYPE_CHOICES)
     value = models.PositiveIntegerField()
-
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="coupons")
-
-    usage_limit = models.PositiveIntegerField(null=True, blank=True)
-    used_count = models.PositiveIntegerField(default=0)
-
-    min_order_price = models.PositiveIntegerField(null=True, blank=True)
 
     start_at = models.DateTimeField(null=True, blank=True)
     end_at = models.DateTimeField(null=True, blank=True)
@@ -99,14 +102,67 @@ class Coupon(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['code']),
-            models.Index(fields=['is_active']),
-            models.Index(fields=['start_at']),
-            models.Index(fields=['end_at']),
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["start_at"]),
+            models.Index(fields=["end_at"]),
         ]
 
+    def is_valid_now(self):
+        now = timezone.now()
+        if not self.is_active:
+            return False
+        if self.start_at and now < self.start_at:
+            return False
+        if self.end_at and now > self.end_at:
+            return False
+        return True
+
+    def calculate_discount(self, base_price: int) -> int:
+        if self.type == "percent":
+            return (base_price * self.value) // 100
+        return min(base_price, self.value)
+
+    @classmethod
+    def get_active_global_discount(cls):
+        now = timezone.now()
+        return (
+            cls.objects.filter(is_active=True)
+            .filter(
+                models.Q(start_at__isnull=True) | models.Q(start_at__lte=now),
+                models.Q(end_at__isnull=True) | models.Q(end_at__gte=now),
+            )
+            .order_by("-id")
+            .first()
+        )
+
     def __str__(self):
-        return f"Coupon {self.code}"
+        return f"GlobalDiscount {self.type} {self.value}"
+
+
+# ============================================================
+# Coupon
+# ============================================================
+class Coupon(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+
+    type = models.CharField(max_length=10, choices=DISCOUNT_TYPE_CHOICES)
+    value = models.PositiveIntegerField()
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="coupons",
+    )
+
+    usage_limit = models.PositiveIntegerField(null=True, blank=True)
+    used_count = models.PositiveIntegerField(default=0)
+    min_order_price = models.PositiveIntegerField(null=True, blank=True)
+
+    start_at = models.DateTimeField(null=True, blank=True)
+    end_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
 
     def is_valid_now(self, user=None, order_total=None):
         now = timezone.now()
@@ -125,3 +181,11 @@ class Coupon(models.Model):
             if order_total < self.min_order_price:
                 return False
         return True
+
+    def calculate_discount(self, base_price: int) -> int:
+        if self.type == "percent":
+            return (base_price * self.value) // 100
+        return min(base_price, self.value)
+
+    def __str__(self):
+        return f"Coupon {self.code}"

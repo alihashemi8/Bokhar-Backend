@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Category, Product, ProductPricingTab, MaterialPrice
-from discounts.utils import calculate_final_price
+from discounts.engine import DiscountEngine
 import json
 from .models import ProductPricingTab, MaterialPrice
 from discounts.models import ProductDiscount
@@ -74,32 +74,11 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_pricing(self, obj):
-        """
-        خروجی ساختار قیمت‌گذاری با لحاظ کردن تخفیف‌ها
-        ساختار:
-        {
-          "<tab_name>": {
-             "id": <tab_id>,
-             "sizeType": "...",
-             "materialPrices": [
-                {
-                   "id": mp.id,
-                   "material": mp.material,
-                   "price": mp.price,
-                   "final_price": <after discount>,
-                   "has_discount": true/false,
-                   "discount_type": "percent"/"fixed"/null,
-                   "discount_value": int|null,
-                   "discount_scope": "material"/"pricing_tab"/"product"/"category"/"global"/"coupon"/null,
-                   "discount_start_at": datetime|null,
-                   "discount_end_at": datetime|null,
-                },
-                ...
-             ]
-          },
-          ...
-        }
-        """
+        request = self.context.get("request")
+        user = request.user if request else None
+
+        engine = DiscountEngine(user=user)
+
         pricing_tabs = obj.pricing_tabs.all()
         final_output = {}
 
@@ -110,22 +89,24 @@ class ProductDetailSerializer(serializers.ModelSerializer):
                 "materialPrices": []
             }
 
-            # دسترسی به related name استاندارد
             material_prices = tab.material_prices.all()
 
             for mp in material_prices:
-                # استفاده از منطق مرکزی تخفیف
-                final_price, discount_obj, discount_scope = calculate_final_price(
+                result = engine.calculate_item_price(
+                    base_price=mp.price,
                     product=obj,
                     pricing_tab=tab,
-                    material=mp
+                    material=mp,
                 )
+
+                discount_obj = result.base_discount_instance
+                discount_scope = result.applied_discount_type
 
                 data = {
                     "id": mp.id,
                     "material": mp.material,
                     "price": mp.price,
-                    "final_price": int(final_price),  # اطمینان از int بودن
+                    "final_price": result.final_price,
                     "has_discount": discount_obj is not None,
                     "discount_type": None,
                     "discount_value": None,
@@ -134,8 +115,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
                     "discount_end_at": None,
                 }
 
-                if discount_obj is not None:
-                    # GlobalDiscount و ProductDiscount هر دو فیلد type/value/start/end دارند
+                if discount_obj:
                     data["discount_type"] = discount_obj.type
                     data["discount_value"] = discount_obj.value
                     data["discount_start_at"] = discount_obj.start_at
@@ -144,6 +124,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
                 final_output[tab.tab_name]["materialPrices"].append(data)
 
         return final_output
+
 
 
 # ----------------------------------------------------
