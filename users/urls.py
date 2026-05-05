@@ -1,19 +1,40 @@
 from django.urls import path
+from rest_framework.routers import DefaultRouter
 
-from . import views
-from .views import *
+from .views import (
+    SendOTPView,
+    RegisterOTPView,
+    LoginOTPView,
+    LoginPasswordView,
+    EditFullNameView,
+    EditPasswordView,
+    RefreshTokenView,
+    VerifyTokenView,
+    LogOutView,
+    CustomerViewSet,
+    get_csrf_token,
+)
 
 app_name = "users"
 
 urlpatterns = [
-    path("sent/otp/", views.SendOTPView.as_view(), name="otp"),
-    path("register/otp/", views.RegisterOTPView.as_view(), name="register"),
-    path("login/otp/", views.LoginOTPView.as_view(), name="login_otp"),
-    path("login/", views.LoginPasswordView.as_view(), name="login"),
-    path("edit/name/", views.EditFullNameView.as_view(), name="fullname"),
-    path("edit/password/", views.EditPasswordView.as_view(), name="password"),
-    path("refresh/",  views.RefreshTokenView.as_view(), name="refresh"),
-    path("verify/", views.VerifyTokenView.as_view(), name="verify"),
-    path("logout/", views.LogOutView.as_view(), name="logout"),
+    path("sent/otp/", SendOTPView.as_view(), name="otp"),
+    path("register/otp/", RegisterOTPView.as_view(), name="register"),
+    path("login/otp/", LoginOTPView.as_view(), name="login_otp"),
+    path("login/", LoginPasswordView.as_view(), name="login"),
+    path("edit/name/", EditFullNameView.as_view(), name="fullname"),
+    path("edit/password/", EditPasswordView.as_view(), name="password"),
+    path("refresh/", RefreshTokenView.as_view(), name="refresh"),
+    path("verify/", VerifyTokenView.as_view(), name="verify"),
+    path("logout/", LogOutView.as_view(), name="logout"),
     path("csrf/", get_csrf_token, name="get-csrf-token"),
 ]
+
+# ------------------------------------------------------------------
+# Router
+# ------------------------------------------------------------------
+
+router = DefaultRouter()
+router.register("customers", CustomerViewSet, basename="customers")
+
+urlpatterns += router.urls

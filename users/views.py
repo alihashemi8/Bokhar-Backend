@@ -2,25 +2,36 @@ import json
 
 from django.conf import settings
 from django.http import JsonResponse
+from django.contrib.auth import get_user_model
+from django.views.decorators.csrf import (
+    csrf_exempt,
+    csrf_protect,
+    ensure_csrf_cookie,
+)
 from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt, csrf_protect
-from django.views.decorators.csrf import ensure_csrf_cookie
 
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
-from django.contrib.auth import get_user_model
+from .models import User
+from .serializers import (
+    SendOTPSerializer,
+    RegisterOTPSerializer,
+    LoginOTPSerializer,
+    LoginPasswordSerializer,
+    EditFullNameSerializer,
+    EditPasswordSerializer,
+    UserSerializer,
+)
+from .tasks import send_sms
+from .utils import generate_otp
 
-from .models import *
-from .serializers import *
-from .tasks import *
-from .utils import *
 
 
 User = get_user_model()
@@ -289,3 +300,12 @@ class EditPasswordView(APIView):
 @ensure_csrf_cookie
 def get_csrf_token(request):
     return JsonResponse({'detail': 'CSRF cookie set'})
+
+
+class CustomerViewSet(ReadOnlyModelViewSet):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # فقط مشتری‌ها (نه ادمین / seller)
+        return User.objects.filter(role="user").order_by("-created_at")

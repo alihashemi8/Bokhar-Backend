@@ -245,3 +245,12 @@ class EditPasswordSerializer(serializers.Serializer):
         instance.save()
         return instance
 
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "fullname",
+            "phone",
+            "created_at",
+        ]
