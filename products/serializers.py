@@ -30,16 +30,33 @@ class PricingTabSerializer(serializers.ModelSerializer):
 # Category
 # ----------------------------------------------------
 class CategorySerializer(serializers.ModelSerializer):
+    discount = serializers.SerializerMethodField()
+
     class Meta:
         model = Category
-        fields = ['id', 'name', 'image']
+        fields = ['id', 'name', 'image', 'discount']
 
+    def get_discount(self, obj):
+        d = getattr(obj, "discount", None)
+        if not d:
+            return None
+
+        return {
+            "id": d.id,
+            "type": d.type,
+            "value": d.value,
+            "start_at": d.start_at,
+            "end_at": d.end_at,
+            "is_active": d.is_active,
+        }
 
 # ----------------------------------------------------
 # Product LIST (GET)
 # ----------------------------------------------------
 class ProductListSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
+    has_discount = serializers.SerializerMethodField()
+    pricing = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -49,8 +66,28 @@ class ProductListSerializer(serializers.ModelSerializer):
             'category',
             'status',
             'image',
-            'base_price'
+            'base_price',
+            'has_discount',
+            'pricing',
         ]
+    def get_pricing(self, obj):
+        request = self.context.get("request")
+        serializer = ProductDetailSerializer(obj, context={"request": request})
+        return serializer.data.get("pricing")
+
+
+    def get_has_discount(self, obj):
+        # تخفیف از دسته
+        if hasattr(obj.category, "discount") and obj.category.discount:
+            d = obj.category.discount
+            if d.is_active:
+                return True
+
+        # تخفیف روی مواد (بدون محاسبه کامل)
+        return ProductDiscount.objects.filter(
+            product=obj,
+            is_active=True
+        ).exists()
 
 
 # ----------------------------------------------------
