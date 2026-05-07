@@ -1,137 +1,243 @@
-from django.utils import timezone
 from rest_framework import serializers
+from .models import Category, Product, ProductPricingTab, MaterialPrice
+from discount.utils import calculate_final_price
+import json
+from .models import ProductPricingTab, MaterialPrice
+from discount.models import ProductDiscount
 
-from .models import Category, Product, Size
 
-
-# برای نمایش محصول
-class SizeSerializer(serializers.ModelSerializer):
+# ----------------------------------------------------
+# MaterialPrice (Read Only)
+# ----------------------------------------------------
+class MaterialPriceSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Size
-        fields = ["id", "meter", "single_double"]
+        model = MaterialPrice
+        fields = ['material', 'price']
 
 
+# ----------------------------------------------------
+# PricingTab (Read Only)
+# ----------------------------------------------------
+class PricingTabSerializer(serializers.ModelSerializer):
+    material_prices = MaterialPriceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ProductPricingTab
+        fields = ['tab_name', 'size_type', 'material_prices']
+
+
+# ----------------------------------------------------
+# Category
+# ----------------------------------------------------
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ["id", "name", "image"]
+        fields = ['id', 'name', 'image']
 
 
-class ProductSerializer(serializers.ModelSerializer):
+# ----------------------------------------------------
+# Product LIST (GET)
+# ----------------------------------------------------
+class ProductListSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
-    size = SizeSerializer(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            'id',
+            'title',
+            'category',
+            'status',
+            'image',
+            'base_price'
+        ]
+
+
+# ----------------------------------------------------
+# Product DETAIL (GET)
+# ----------------------------------------------------
+class ProductDetailSerializer(serializers.ModelSerializer):
+    category = CategorySerializer(read_only=True)
+    pricing = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
             "id",
-            "name",
-            "price",
-            "price_meter",
-            "new_price",
-            "discount_percent",
-            "category",
-            "size",
+            "title",
             "image",
-            "material",
-            "expiration_date",
-            "description",
-            "service_type",
+            "category",
+            "pricing",
+            "status",
+            "base_price",
+            "created_at"
         ]
 
+    def get_pricing(self, obj):
+        pricing_tabs = obj.pricing_tabs.all()
+        final_output = {}
 
-# update,creat
-class ProductCreateSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(required=False, allow_null=True)
+        for tab in pricing_tabs:
+            final_output[tab.tab_name] = {
+                "id": tab.id,
+                "sizeType": tab.size_type,
+                "materialPrices": []
+            }
 
-    class Meta:
-        model = Product
-        fields = "__all__"
-        read_only_fields = ["is_verified", "new_price"]  # حذف price از read_only اگر میخوای API price قبول کنه
+            material_prices = getattr(tab, "material_prices", None)
 
-    def validate(self, data):
-        price_meter = data.get("price_meter")
-        price = data.get("price")
-        size = data.get("size")
-        discount_percent = data.get("discount_percent")
-        expiration_date = data.get("expiration_date")
+            if material_prices:
+                material_prices = material_prices.all()
+            else:
+                material_prices = tab.materialprice_set.all()
 
-        # محصول متری
-        if price_meter:
-            if not size:
-                raise serializers.ValidationError(
-                    {"size": "برای محصول متری، سایز الزامی است"}
-                )
-        else:
-            # محصول غیرمتری
-            if not price:
-                raise serializers.ValidationError(
-                    {"price": "اگر قیمت متری نیست، قیمت الزامی است"}
-                )
+            for mp in material_prices:
+                discount_obj = ProductDiscount.objects.filter(
+                    material=mp,
+                    is_active=True
+                ).first()
 
-        # تخفیف
-        if discount_percent and not expiration_date:
-            raise serializers.ValidationError(
-                {"expiration_date": "برای تخفیف، تاریخ انقضا الزامی است"}
-            )
+                discount_amount = discount_obj.value if discount_obj else 0
 
-        return data
+                final_output[tab.tab_name]["materialPrices"].append({
+                    "id": mp.id,
+                    "material": mp.material,
+                    "price": mp.price,
+                    "discount_amount": discount_amount
+                })
 
+        return final_output
 
-    def create(self, validated_data):
-       expiration_date = validated_data.get("expiration_date", None)
-       product = Product.objects.create(**validated_data)
-       if product.discount_percent and not expiration_date: raise serializers.ValidationError(
-           "برای تخفیف باید تاریخ انقضا مشخص شود")
-
-       return product
-
-class ProductUpdateSerializer(serializers.ModelSerializer):
-    material = serializers.CharField(required=False)
-    service_type = serializers.CharField(required=False)
-    price_meter = serializers.IntegerField(required=False, min_value=0)
-    price = serializers.IntegerField(required=False, min_value=1)
-    name = serializers.CharField(required=False)
+# ----------------------------------------------------
+# Product CREATE / UPDATE
+# ----------------------------------------------------
+class ProductCreateUpdateSerializer(serializers.ModelSerializer):
+    pricing = serializers.JSONField(write_only=True)
 
     class Meta:
         model = Product
         fields = [
-            "name",
-            "price",
-            "category",
-            "size",
-            "price_meter",
-            "image",
-            "material",
-            "discount_percent",
-            "description",
-            "service_type",
-            "expiration_date",
+            'id',
+            'title',
+            'category',
+            'status',
+            'image',
+            'base_price',
+            'pricing'
         ]
-        read_only_fields = ["is_verified", "new_price"]
 
+    # ---------------- CREATE ----------------
+    def create(self, validated_data):
+        pricing_raw = validated_data.pop('pricing', {})
+        product = Product.objects.create(**validated_data)
+
+        pricing_data = self._parse_pricing(pricing_raw)
+        self._create_pricing(product, pricing_data)
+
+        return product
+
+    # ---------------- UPDATE ----------------
     def update(self, instance, validated_data):
-        discount_percent = validated_data.get("discount_percent", instance.discount_percent)
-        expiration_date = validated_data.get("expiration_date", instance.expiration_date)
+        pricing_raw = validated_data.pop('pricing', None)
 
-        price_meter = validated_data.get("price_meter", instance.price_meter)
-        size = validated_data.get("size", instance.size)
-
-        # Validation تخفیف قبل از تغییر instance
-        if discount_percent and not expiration_date:
-            raise serializers.ValidationError({
-                "expiration_date": "برای تخفیف باید تاریخ انقضا مشخص شود"
-            })
-
-        # محاسبه price برای محصولات متری قبل از setattr
-        if price_meter is not None and size and size.meter:
-            validated_data["price"] = int(price_meter * size.meter)
-
-        # اعمال تغییرات
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-
         instance.save()
+
+        if pricing_raw is not None:
+            instance.pricing_tabs.all().delete()
+            pricing_data = self._parse_pricing(pricing_raw)
+            self._create_pricing(instance, pricing_data)
+
         return instance
 
+    # ---------------- PARSE PRICING ----------------
+    def _parse_pricing(self, pricing_raw):
+        if isinstance(pricing_raw, str):
+            try:
+                return json.loads(pricing_raw)
+            except json.JSONDecodeError:
+                raise serializers.ValidationError({
+                    "pricing": "فرمت JSON نامعتبر است"
+                })
 
+        if not isinstance(pricing_raw, dict):
+            raise serializers.ValidationError({
+
+                "pricing": "فرمت قیمت‌گذاری نامعتبر است"
+            })
+
+        return pricing_raw
+
+    # ---------------- CREATE PRICING TABS ----------------
+    def _create_pricing(self, product, pricing_data):
+        for tab_name, tab_data in pricing_data.items():
+
+            material_prices = tab_data.get('materialPrices') or {}
+
+            if not isinstance(material_prices, (dict, list)) or len(material_prices) == 0:
+                continue
+
+            pricing_tab = ProductPricingTab.objects.create(
+                product=product,
+                tab_name=tab_name,
+                size_type=tab_data.get('sizeType', '')
+            )
+
+            if isinstance(material_prices, list):
+                for item in material_prices:
+                    material = item.get("material")
+                    price = item.get("price")
+
+                    if not material or price in [None, "", 0, "0"]:
+                        continue
+
+                    MaterialPrice.objects.create(
+                        pricing_tab=pricing_tab,
+                        material=material,
+                        price=int(price)
+                    )
+
+            elif isinstance(material_prices, dict):
+                for material, price in material_prices.items():
+                    if price in [None, "", 0, "0"]:
+                        continue
+
+                    MaterialPrice.objects.create(
+                        pricing_tab=pricing_tab,
+                        material=material,
+                        price=int(price)
+                    )
+
+    # ---------------- VALIDATION ----------------
+    def validate_pricing(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("فرمت قیمت‌گذاری نامعتبر است")
+
+        has_any_valid_tab = False
+
+        for tab_name, tab_data in value.items():
+            material_prices = tab_data.get('materialPrices', {})
+
+            if isinstance(material_prices, dict):
+                valid_prices = [
+                    p for p in material_prices.values()
+                    if p not in [None, "", 0, "0"]
+                ]
+                if valid_prices:
+                    has_any_valid_tab = True
+
+            elif isinstance(material_prices, list):
+                valid_prices = [
+                    item.get("price") for item in material_prices
+                    if item.get("price") not in [None, "", 0, "0"]
+                ]
+                if valid_prices:
+                    has_any_valid_tab = True
+
+        if not has_any_valid_tab:
+            raise serializers.ValidationError(
+                "حداقل یک تب با یک جنس قیمت‌گذاری‌شده لازم است"
+            )
+
+        return value

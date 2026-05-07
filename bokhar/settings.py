@@ -10,7 +10,7 @@ DEBUG = config("DEBUG", default=True, cast=bool)
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 # Application definition
 INSTALLED_APPS = [
@@ -24,13 +24,16 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "users",
-    "notifications",
     "django_celery_results",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     # "wallet",
     "product",
     "order",
+    "home",
+"discount",
+
+
 ]
 
 MIDDLEWARE = [
@@ -39,7 +42,6 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
-    "bokhar.middleware.CookieToHeaderMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -95,9 +97,10 @@ AUTHENTICATION_BACKENDS = [
 
 # Internationalization
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
 USE_I18N = True
+
 USE_TZ = True
+TIME_ZONE = "Asia/Tehran"
 
 # Static files
 STATIC_URL = "static/"
@@ -113,21 +116,26 @@ AUTH_USER_MODEL = "users.User"  # مدل سفارشی User
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # یا هر پورتی که React اجرا میشه
+    "http://localhost:5173",  # آدرس فرانت‌ند شما
+    "http://127.0.0.1:5173",
 ]
+
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "users.authenticate.CookieJWTAuthentication",  # فقط CookieJWTAuthentication
     ],
     # "DEFAULT_PERMISSION_CLASSES": [
     #   "rest_framework.permissions.IsAuthenticated",
     # ],
 }
-
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = False
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
@@ -169,5 +177,3 @@ CELERY_TASK_SERIALIZER = "json"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-USE_TZ = True
-TIME_ZONE = "Asia/Tehran"

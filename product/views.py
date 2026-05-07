@@ -1,64 +1,104 @@
-from django.db.models import Q
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
-from rest_framework import status, viewsets
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
-from rest_framework.response import Response
+
+from rest_framework import status
 from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from django.db.models import Q
 
-from .models import *
-from .permission import *
-from .serializers import *
+from .models import Category, Product
+from .serializers import (
+    CategorySerializer,
+    ProductListSerializer,
+    ProductDetailSerializer,  # نسخه جدید و نهایی
+    ProductCreateUpdateSerializer
+)
+from .permission import IsSeller
 
+
+# -----------------------
+#   Category Views
+# -----------------------
+
+class CategoryListView(APIView):
+    permission_classes = [IsSeller]
+
+    def get(self, request):
+        categories = Category.objects.filter(is_active=True)
+        return Response(CategorySerializer(categories, many=True).data)
+
+    def post(self, request):
+        serializer = CategorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CategoryDetailView(APIView):
+    permission_classes = [IsSeller]
+
+    def delete(self, request, pk):
+        category = get_object_or_404(Category, pk=pk)
+        category.delete()  # حذف فیزیکی؛ اگر soft delete داری اینجا تغییرش بده
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# -----------------------
+#   Product Views
+# -----------------------
 
 class ProductListView(APIView):
     permission_classes = [IsSeller]
 
     def get(self, request):
-        products = Product.objects.filter(is_verified=True)
-        serializer = ProductSerializer(products, many=True)
-        return Response(serializer.data)
+        products = Product.objects.all()
+        return Response(ProductListSerializer(products, many=True).data)
 
 
 class ProductDetailView(APIView):
     permission_classes = [IsSeller]
 
     def get(self, request, pk):
-        product = get_object_or_404(Product, pk=pk, is_verified=True)
-        serializer = ProductSerializer(product)
-        return Response(serializer.data)
+        product = get_object_or_404(Product, pk=pk)
+        return Response(ProductDetailSerializer(product).data)
 
 
 class ProductCreateView(APIView):
     permission_classes = [IsSeller]
-    serializer_class = ProductCreateSerializer
 
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)
+        serializer = ProductCreateUpdateSerializer(data=request.data)
         if serializer.is_valid():
-
-            serializer.save()
+            product = serializer.save()
             return Response(
-                {"detail": "محصول با موفقیت اضافه شد.", "data": serializer.data},
-                status=status.HTTP_201_CREATED,
+                {
+                    "detail": "سرویس با موفقیت ایجاد شد",
+                    "data": ProductDetailSerializer(product).data
+                },
+                status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ProductUpdateView(APIView):
     permission_classes = [IsSeller]
-    serializer_class = ProductUpdateSerializer
 
     def put(self, request, pk):
         product = get_object_or_404(Product, pk=pk)
-
-        serializer = self.serializer_class(product, data=request.data, partial=True)
+        serializer = ProductCreateUpdateSerializer(product, data=request.data, partial=True)
 
         if serializer.is_valid():
-            serializer.save()
+            product = serializer.save()
             return Response(
-                {"detail": "محصول با موفقیت آپدیت شد", "data": serializer.data},
-                status=status.HTTP_200_OK,
+                {
+                    "detail": "سرویس با موفقیت بروزرسانی شد",
+                    "data": ProductDetailSerializer(product).data
+                },
+                status=status.HTTP_200_OK
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -70,21 +110,37 @@ class ProductDeleteView(APIView):
     def delete(self, request, pk):
         product = get_object_or_404(Product, pk=pk)
         product.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "deleted"}, status=status.HTTP_200_OK)
 
 
 class ProductSearchView(APIView):
+    permission_classes = [IsSeller]
+
     def get(self, request):
-        q = request.GET.get("q", "")
+        q = request.GET.get("q", "").strip()
+
         if not q:
-            return Response({"detail": "پارامتر q ارسال نشده"}, status=400)
+            return Response(
+                {"detail": "پارامتر q الزامی است"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         products = Product.objects.filter(
-            Q(name__icontains=q)
-            | Q(service_type__icontains=q)
-            | Q(category__name__icontains=q),
-            is_verified=True,
+            Q(title__icontains=q) |
+            Q(category__name__icontains=q),
+            status="active"
         )
 
-        serializer = ProductSerializer(products, many=True)
-        return Response(serializer.data)
+        return Response(ProductListSerializer(products, many=True).data)
+
+
+class UpdateStatusAcceptedView(APIView):
+    permission_classes = [IsSeller]
+    def put(self, request):
+        ids = request.data.get("ids")
+        if not ids:
+            return Response({"detail":"انتخاب کن"},status=400)
+        orders = Order.objects.filter(id__in=ids).update(staus = "wash")
+        return Response({"orders":orders})
+
+
