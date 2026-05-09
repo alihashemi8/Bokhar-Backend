@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser ,JSONParser  
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
@@ -9,7 +10,7 @@ from .models import Category, Product
 from .serializers import (
     CategorySerializer,
     ProductListSerializer,
-    ProductDetailSerializer,  # نسخه جدید و نهایی
+    ProductDetailSerializer,
     ProductCreateUpdateSerializer
 )
 from .permission import IsSeller
@@ -42,7 +43,7 @@ class CategoryDetailView(APIView):
 
     def delete(self, request, pk):
         category = get_object_or_404(Category, pk=pk)
-        category.delete()  # حذف فیزیکی؛ اگر soft delete داری اینجا تغییرش بده
+        category.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -68,6 +69,7 @@ class ProductDetailView(APIView):
 
 class ProductCreateView(APIView):
     permission_classes = [IsSeller]
+    parser_classes = [MultiPartParser, FormParser,JSONParser]  
 
     def post(self, request):
         serializer = ProductCreateUpdateSerializer(data=request.data)
@@ -85,6 +87,7 @@ class ProductCreateView(APIView):
 
 class ProductUpdateView(APIView):
     permission_classes = [IsSeller]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]  
 
     def put(self, request, pk):
         product = get_object_or_404(Product, pk=pk)

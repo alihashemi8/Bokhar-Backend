@@ -160,3 +160,8 @@ CACHES = {
 CELERY_BROKER_URL = config("CELERY_BROKER_URL")  # برای ادرس سلری
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
+
+
+# Media files (for uploaded images)
+MEDIA_URL = "media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
