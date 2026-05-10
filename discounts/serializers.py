@@ -20,8 +20,17 @@ class GlobalDiscountSerializer(serializers.ModelSerializer):
         model = GlobalDiscount
         fields = "__all__"
 
-
 class CouponSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coupon
-        fields = "__all__"
+        fields = [
+            'id', 'code', 'type', 'value', 'user',
+            'usage_limit', 'used_count', 'min_order_amount',
+            'starts_at', 'ends_at', 'is_active', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'used_count']
+        # اگر می‌خواهید کد توسط بک‌اند ساخته شود و فرستاده شود:
+        extra_kwargs = {
+            'code': {'required': False, 'allow_blank': True}
+        }
+

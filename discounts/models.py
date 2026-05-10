@@ -1,3 +1,5 @@
+import random
+import string
 from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
@@ -15,11 +17,20 @@ DISCOUNT_TYPE_CHOICES = (
     ("fixed", "مبلغ ثابت"),
 )
 
+# ---------------------------------------------------------
+# Helper Function
+# ---------------------------------------------------------
+def generate_discount_code(length=8):
+    """تولید کد تصادفی الفبایی-عددی"""
+    characters = string.ascii_uppercase + string.digits
+    return "".join(random.choices(characters, k=length))
+
 
 # ============================================================
-# Product Discount
+# Product Discount (بدون تغییر)
 # ============================================================
 class ProductDiscount(models.Model):
+    # ... (کدهای قبلی بدون تغییر) ...
     product = models.ForeignKey(
         Product,
         null=True,
@@ -32,7 +43,7 @@ class ProductDiscount(models.Model):
         null=True,
         blank=True,
         on_delete=models.CASCADE,
-        related_name="discounts",
+        related_name="product_discounts",  # تغییر related_name برای جلوگیری از تداخل
     )
     pricing_tab = models.ForeignKey(
         ProductPricingTab,
@@ -90,7 +101,7 @@ class ProductDiscount(models.Model):
 
 
 # ============================================================
-# Global Discount
+# Global Discount (بدون تغییر)
 # ============================================================
 class GlobalDiscount(models.Model):
     type = models.CharField(max_length=10, choices=DISCOUNT_TYPE_CHOICES)
@@ -140,13 +151,22 @@ class GlobalDiscount(models.Model):
 
 
 # ============================================================
-# Coupon
+# Coupon (اصلاح شده با تولید خودکار کد)
 # ============================================================
 class Coupon(models.Model):
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(
+        max_length=50, 
+        unique=True, 
+        blank=True,  # اجازه خالی بودن برای تولید خودکار
+        verbose_name="کد تخفیف"
+    )
 
-    type = models.CharField(max_length=10, choices=DISCOUNT_TYPE_CHOICES)
-    value = models.PositiveIntegerField()
+    type = models.CharField(
+        max_length=10, 
+        choices=DISCOUNT_TYPE_CHOICES,
+        verbose_name="نوع تخفیف"
+    )
+    value = models.PositiveIntegerField(verbose_name="مقدار")
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -154,15 +174,50 @@ class Coupon(models.Model):
         blank=True,
         on_delete=models.CASCADE,
         related_name="coupons",
+        verbose_name="کاربر خاص (اختیاری)"
     )
 
-    usage_limit = models.PositiveIntegerField(null=True, blank=True)
-    used_count = models.PositiveIntegerField(default=0)
-    min_order_price = models.PositiveIntegerField(null=True, blank=True)
+    usage_limit = models.PositiveIntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="حداکثر تعداد استفاده"
+    )
+    used_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="تعداد استفاده شده"
+    )
+    # نام فیلد با فرانت‌اند هماهنگ شد (min_order_amount)
+    min_order_amount = models.PositiveIntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="حداقل مبلغ سفارش"
+    )
 
-    start_at = models.DateTimeField(null=True, blank=True)
-    end_at = models.DateTimeField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
+    # نام فیلد با فرانت‌اند هماهنگ شد (starts_at, ends_at)
+    starts_at = models.DateTimeField(null=True, blank=True, verbose_name="تاریخ شروع")
+    ends_at = models.DateTimeField(null=True, blank=True, verbose_name="تاریخ پایان")
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+
+    created_at = models.DateTimeField(auto_now_add=True)  # برای مرتب‌سازی
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["code"]),
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["starts_at"]),
+            models.Index(fields=["ends_at"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        """تولید خودکار کد در صورت خالی بودن"""
+        if not self.code:
+            while True:
+                new_code = generate_discount_code()
+                if not Coupon.objects.filter(code=new_code).exists():
+                    self.code = new_code
+                    break
+        super().save(*args, **kwargs)
 
     def is_valid_now(self, user=None, order_total=None):
         now = timezone.now()
@@ -171,14 +226,14 @@ class Coupon(models.Model):
             return False
         if self.user and self.user != user:
             return False
-        if self.start_at and now < self.start_at:
+        if self.starts_at and now < self.starts_at:
             return False
-        if self.end_at and now > self.end_at:
+        if self.ends_at and now > self.ends_at:
             return False
         if self.usage_limit and self.used_count >= self.usage_limit:
             return False
-        if self.min_order_price and order_total is not None:
-            if order_total < self.min_order_price:
+        if self.min_order_amount and order_total is not None:
+            if order_total < self.min_order_amount:
                 return False
         return True
 
