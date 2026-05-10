@@ -347,10 +347,14 @@ class Order(models.Model):
         return 0
 
     def save(self, *args, **kwargs):
-        if not self.pk:   # فقط هنگام ایجاد
-            self.rush_fee = self.calculate_rush_fee()
-            self.percent_fee = self.calculate_percent_fee()   # ذخیره درصد
-            self.order_type = self.order_range_type()
+        if not self.pk:
+            # فقط اگر قبلاً ست نشده بودن، محاسبه کن
+            if not self.rush_fee:
+                self.rush_fee = self.calculate_rush_fee()
+            if not self.percent_fee:
+                self.percent_fee = self.calculate_percent_fee()
+            if not self.order_type:
+                self.order_type = self.order_range_type()
         super().save(*args, **kwargs)
 
 

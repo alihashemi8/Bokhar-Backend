@@ -168,9 +168,10 @@ class OrderCreateSerializer(serializers.Serializer):
     def create(self, validated_data):
         request = self.context['request']
         user = request.user
-        cart = OrderSession(request)  # همان OrderSession شما
+        cart = OrderSession(request)
 
-        if not list(cart):
+        cart_items = list(cart)
+        if not cart_items:
             raise serializers.ValidationError("سبد خرید خالی است")
 
         # ۱. آدرس
@@ -185,7 +186,7 @@ class OrderCreateSerializer(serializers.Serializer):
             addr_serializer.is_valid(raise_exception=True)
             address = addr_serializer.save()
 
-        # ۲. قفل کردن قالب‌های ظرفیت و دریافت هزینه‌ها
+        # ۲. قفل کردن قالب‌های ظرفیت
         pickup_template = PickUpTemplate.objects.select_for_update().get(
             time_shift=validated_data['pickup_shift'],
             is_active=True
@@ -195,9 +196,7 @@ class OrderCreateSerializer(serializers.Serializer):
             is_active=True
         )
 
-
-
-        # محاسبه نوع سفارش برای بررسی دقیق ظرفیت
+        # ۳. بررسی نوع سفارش و ظرفیت
         temp_order = Order(
             pickup_date=validated_data['pickup_date'],
             pickup_shift=validated_data['pickup_shift'],
@@ -215,133 +214,135 @@ class OrderCreateSerializer(serializers.Serializer):
             validated_data['delivery_date'],
             validated_data['delivery_shift']
         )
+
         if available_pickup <= 0:
             raise serializers.ValidationError("ظرفیت تحویل‌گیری تکمیل است")
         if available_delivery <= 0:
             raise serializers.ValidationError("ظرفیت تحویل‌دهی تکمیل است")
 
-        # ۳. ایجاد اولیه سفارش (وضعیت رزرو)
-        order = Order(
-            user=user,
-            address=address,
-            pickup_date=validated_data['pickup_date'],
-            pickup_shift=validated_data['pickup_shift'],
-            delivery_date=validated_data['delivery_date'],
-            delivery_shift=validated_data['delivery_shift'],
-            description=validated_data['description'],
-            status=OrderStatus.PAID,
+        # ۴. محاسبه هزینه‌های ثابت
+        rush_fee = temp_order.calculate_rush_fee()
+        percent_fee = temp_order.calculate_percent_fee()
+        pickup_cost = pickup_template.base_price + pickup_template.price_add
+        delivery_base = delivery_template.base_price + delivery_template.price_add
 
-        )
-        order.save()  # rush_fee, percent_fee, order_type داخل save محاسبه و ذخیره می‌شوند
-        # محاسبه‌ی هزینه‌های ثابت تحویل‌گیری و تحویل‌دهی
-
-        # ۴. حلقه روی آیتم‌های سبد خرید و ایجاد OrderItem با اعمال تخفیف‌ها
+        # ۵. محاسبه آیتم‌ها
         engine = DiscountEngine(user=user)
+        computed_items = []
         subtotal_raw = 0
         total_item_discounts = 0
 
-        for item_data in cart:
-            # item_data از __iter__ کلاس CartSession می‌آید.
-            # اطمینان می‌دهیم که product و pricing_tab در دسترس هستند
-            product = item_data.get('product')
-            if not product:
-                product = Product.objects.get(id=item_data['product_id'])
-
-            pricing_tab_id = item_data['pricing_tab_id']
-            pricing_tab = item_data.get('pricing_tab')
-            if not pricing_tab:
-                pricing_tab = ProductPricingTab.objects.get(id=pricing_tab_id)
+        for item_data in cart_items:
+            product = item_data.get('product') or Product.objects.get(id=item_data['product_id'])
+            pricing_tab = item_data.get('pricing_tab') or ProductPricingTab.objects.get(id=item_data['pricing_tab_id'])
 
             material_name = item_data['material']
-            size_id = item_data.get('size')
             size = None
-            if size_id:
-                size = item_data.get('size_obj')
-                if not size:
-                    size = Size.objects.get(id=size_id)
+            if item_data.get('size'):
+                size = item_data.get('size_obj') or Size.objects.get(id=item_data['size'])
 
             quantity = item_data['quantity']
 
-            # قیمت پایه از MaterialPrice
             material_price = MaterialPrice.objects.get(
                 pricing_tab=pricing_tab,
                 material=material_name
             )
-            base_price = material_price.price
 
-            # محاسبه تخفیف‌های محصولی
             discount_result = engine.calculate_item_price(
-                base_price=base_price,
+                base_price=material_price.price,
                 product=product,
                 material=material_price,
                 pricing_tab=pricing_tab,
             )
 
-            original_price = discount_result.base_price
-            item_discount = discount_result.base_discount_amount
-            final_item_price = discount_result.final_price
+            computed_items.append({
+                "product": product,
+                "pricing_tab": pricing_tab,
+                "size": size,
+                "material_name": material_name,
+                "quantity": quantity,
+                "original_price": discount_result.base_price,
+                "item_discount": discount_result.base_discount_amount,
+                "final_item_price": discount_result.final_price,
+                "applied_product_discount": discount_result.base_discount_instance,
+            })
 
-            OrderItem.objects.create(
-                order=order,
-                product=product,
-                size=size,
-                pricing_tab=pricing_tab,
-                material=material_name,
-                quantity=quantity,
-                original_price=original_price,
-                item_discount=item_discount,
-                price=final_item_price,
-                applied_product_discount=discount_result.base_discount_instance,
-            )
+            subtotal_raw += discount_result.base_price * quantity
+            total_item_discounts += discount_result.base_discount_amount * quantity
 
-            subtotal_raw += original_price * quantity
-            total_item_discounts += item_discount * quantity
+        # ۶. محاسبات بعد از حلقه
+        subtotal_after_items = subtotal_raw - total_item_discounts
 
-        # ۵. ثبت جمع‌های مالی در سفارش
-        order.subtotal_raw = subtotal_raw
-        order.total_item_discounts = total_item_discounts
-        order.subtotal_after_items = subtotal_raw - total_item_discounts
-        order.pickup_cost = pickup_template.base_price + pickup_template.price_add
-        order.delivery_cost = delivery_template.base_price + delivery_template.price_add + order.rush_fee
-        # ۶. اعمال کوپن (در صورت ارسال)
-        coupon_code = validated_data.get('coupon_code')
-        if coupon_code:
-            success, coupon_discount, coupon_instance = engine.apply_coupon(
-                coupon_code,
-                order.subtotal_after_items
-            )
-            if not success:
-                raise serializers.ValidationError("کد تخفیف نامعتبر یا منقضی شده است")
-            order.applied_coupon = coupon_instance
-            order.order_discount_amount = coupon_discount
-        else:
-            order.order_discount_amount = 0
+        # ۷. محاسبه قیمت نهایی اولیه (بدون کوپن)
+        # این قیمت باید برای min_order_price چک بشه
+        percent_amount_before_coupon = (subtotal_after_items * percent_fee) // 100 if percent_fee else 0
+        delivery_cost_final = delivery_base + rush_fee
 
-        # ۷. محاسبه قیمت نهایی با احتساب تمام هزینه‌ها
-        after_items_and_coupon = order.subtotal_after_items - order.order_discount_amount
-
-        # درصد فوری روی جمع (پس از تخفیف محصولی و کوپن)
-        percent_amount = (after_items_and_coupon * order.percent_fee) // 100 if order.percent_fee else 0
-
-        # قیمت نهایی = جمع آیتم‌ها + درصد فوری + هزینه ثابت فوری + هزینه پیکاپ + هزینه تحویل
-        order.final_price = max(
+        final_price_before_coupon = max(
             0,
-            after_items_and_coupon
-            + percent_amount
-            + order.rush_fee
-            + order.pickup_cost
-            + order.delivery_cost
+            subtotal_after_items +
+            percent_amount_before_coupon +
+            pickup_cost +
+            delivery_cost_final
         )
 
-        order.save()   # ذخیره نهایی با تمام فیلدها
+        # ۸. اعمال کوپن با بررسی min_order_price روی قیمت نهایی
+        coupon_code = validated_data.get('coupon_code')
+        order_discount_amount = 0
+        applied_coupon = None
 
-        # ۸. پاک کردن سبد خرید
-        cart.clear()
+        if coupon_code:
+            # بررسی کوپن با قیمت نهایی (نه subtotal_after_items)
+            success, coupon_discount, coupon_instance = engine.apply_coupon(
+                coupon_code,
+                final_price_before_coupon  # ← قیمت نهایی رو پاس میدیم
+            )
+            if not success:
+                raise serializers.ValidationError(
+                    f"کد تخفیف نامعتبر یا منقضی شده است. "
+                    f"حداقل مبلغ سفارش: {coupon_instance.min_order_price:,} تومان"
+                    if coupon_instance and coupon_instance.min_order_price
+                    else "کد تخفیف نامعتبر یا منقضی شده است"
+                )
+            order_discount_amount = coupon_discount
+            applied_coupon = coupon_instance
 
-        return order
+        # ۹. محاسبه قیمت نهایی با کوپن
+        after_items_and_coupon = max(0, subtotal_after_items - order_discount_amount)
 
+        # درصد فوری روی قیمت بعد از کوپن
+        percent_amount = (after_items_and_coupon * percent_fee) // 100 if percent_fee else 0
 
+        final_price = max(
+            0,
+            after_items_and_coupon +
+            percent_amount +
+            pickup_cost +
+            delivery_cost_final
+        )
 
+        # ۱۰. برگردوندن نتیجه
+        return {
+            "address": address,
+            "computed_items": computed_items,
+            "pickup_template": pickup_template,
+            "delivery_template": delivery_template,
+            "subtotal_raw": subtotal_raw,
+            "total_item_discounts": total_item_discounts,
+            "subtotal_after_items": subtotal_after_items,
+            "order_discount_amount": order_discount_amount,
+            "applied_coupon": applied_coupon,
+            "pickup_cost": pickup_cost,
+            "delivery_cost": delivery_cost_final,
+            "rush_fee": rush_fee,
+            "percent_fee": percent_fee,
+            "final_price": final_price,
+            "description": validated_data.get("description", ""),
+            "pickup_date": validated_data["pickup_date"],
+            "pickup_shift": validated_data["pickup_shift"],
+            "delivery_date": validated_data["delivery_date"],
+            "delivery_shift": validated_data["delivery_shift"],
+        }
 
 
 
