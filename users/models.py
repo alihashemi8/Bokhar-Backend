@@ -38,7 +38,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     fullname = models.CharField(max_length=100)
     phone = models.CharField(max_length=11, unique=True)
     is_admin = models.BooleanField(default=False)
-    role = models.CharField(max_length=50, default="user")  # ← اضافه شد
+    role = models.CharField(max_length=50, default="user")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -62,7 +62,61 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 # ===============================
-# UserProfile (بدون تغییر)
+# Address Model 
+# ===============================
+class Address(models.Model):
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='addresses',
+        verbose_name='کاربر'
+    )
+    title = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name='عنوان آدرس (مثلاً خانه، محل کار)'
+    )
+    province = models.CharField(max_length=100, verbose_name='استان')
+    city = models.CharField(max_length=100, verbose_name='شهر')
+    district = models.CharField(max_length=100, blank=True, verbose_name='منطقه/محله')
+    address_detail = models.TextField(verbose_name='آدرس کامل')
+    postal_code = models.CharField(max_length=20, blank=True, verbose_name='کد پستی')
+    phone = models.CharField(max_length=11, blank=True, verbose_name='تلفن تماس')
+    is_default = models.BooleanField(default=False, verbose_name='آدرس پیش‌فرض')
+    latitude = models.DecimalField(
+        max_digits=9, 
+        decimal_places=6, 
+        null=True, 
+        blank=True, 
+        verbose_name='عرض جغرافیایی'
+    )
+    longitude = models.DecimalField(
+        max_digits=9, 
+        decimal_places=6, 
+        null=True, 
+        blank=True, 
+        verbose_name='طول جغرافیایی'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='تاریخ ایجاد')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='تاریخ بروزرسانی')
+
+    class Meta:
+        verbose_name = 'آدرس'
+        verbose_name_plural = 'آدرس‌ها'
+        ordering = ['-is_default', '-created_at']
+
+    def __str__(self):
+        return f"{self.user.fullname} - {self.city}"
+
+    def save(self, *args, **kwargs):
+        # اگر این آدرس به عنوان پیش‌فرض انتخاب شد، سایر آدرس‌های کاربر را غیرفعال کن
+        if self.is_default:
+            Address.objects.filter(user=self.user).update(is_default=False)
+        super().save(*args, **kwargs)
+
+
+# ===============================
+# UserProfile 
 # ===============================
 class UserProfile(models.Model):
     full_name = models.CharField(max_length=255)

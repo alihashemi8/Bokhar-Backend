@@ -6,11 +6,11 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from product.permission import IsSeller
+from products.permission import IsSeller
 from django.core.cache import cache
 from django.db.models import Count, Q, Prefetch
 
-from product.models import Product
+from products.models import Products
 from .models import Order, OrderStatus, Address
 from .serializers import *
 from .session import OrderSession
@@ -199,7 +199,7 @@ class AddOrderSessionAPIView(APIView):
     serializer_class = OrderSessionSerializer   # این را بررسی کنید – احتمالاً باید CartAddSerializer باشد
 
     def post(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id)
+        product = get_object_or_404(Products, id=product_id)
 
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)

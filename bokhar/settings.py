@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "users",
     "products",
     "discounts",
+    "order",
     "notifications",
     "django_celery_results",
     "rest_framework_simplejwt",

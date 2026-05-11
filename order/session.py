@@ -1,6 +1,5 @@
-
 from order.models import *
-from product.models import *
+from products.models import *
 
 class OrderSession:
     def __init__(self, request):
@@ -15,15 +14,31 @@ class OrderSession:
     def __iter__(self):
         cart = self.cart.copy()
         for key, item in cart.items():
-            product = Product.objects.get(id=item['product_id'])
-            pricing_tab = ProductPricingTab.objects.get(id=item['pricing_tab_id'])
-            size = Size.objects.get(id=item['size']) if item.get('size') else None
-            item['product'] = product
-            item['pricing_tab'] = pricing_tab
-            item['size_obj'] = size
-            item['total_price'] = int(item['price']) * item['quantity']
-            item['id_unique'] = key
-            yield item
+            try:
+                product = Product.objects.get(id=item['product_id'])
+                pricing_tab = ProductPricingTab.objects.get(id=item['pricing_tab_id'])
+                size = Size.objects.get(id=item['size']) if item.get('size') else None
+
+                # اضافه کردن material_price برای محاسبه قیمت لحظه‌ای
+                material_price = MaterialPrice.objects.get(
+                    pricing_tab=pricing_tab,
+                    material=item['material']
+                )
+
+                item['product'] = product
+                item['pricing_tab'] = pricing_tab
+                item['size_obj'] = size
+                item['material_price_obj'] = material_price
+                item['current_price'] = material_price.price  # قیمت لحظه‌ای
+                item['total_price'] = int(material_price.price) * item['quantity']
+                item['id_unique'] = key
+                yield item
+            except (Product.DoesNotExist, ProductPricingTab.DoesNotExist, MaterialPrice.DoesNotExist):
+                # اگر محصول یا قیمت حذف شده بود، از سبد حذف کن
+                del self.cart[key]
+                self.session.modified = True
+                continue
+
 
     def unique_code(self, product_id,pricing_tab_id,size_id,material):
         return f"{product_id}-{pricing_tab_id}-{size_id}--{material}"
@@ -82,6 +97,5 @@ class OrderSession:
     def clear(self):
         self.session["cart"] = {}
         self.session.modified = True
-
 
 

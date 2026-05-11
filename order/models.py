@@ -3,12 +3,12 @@ from textwrap import dedent
 from django.db import models
 from django.utils import timezone
 from datetime import time, datetime
-from product.models import *
+from products.models import *
 from users.models import Address, User
 import random
 import string
 from datetime import timedelta
-from discount.models import (          # ← ایمپورت تخفیف‌های جدید
+from discounts.models import (      
     ProductDiscount,
     GlobalDiscount,
     Coupon,
