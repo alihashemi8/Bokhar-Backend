@@ -7,12 +7,10 @@ from decouple import config
 SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=True, cast=bool)
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
 
-# Application definition
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -64,7 +62,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "bokhar.wsgi.application"
 
-# Database
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -72,59 +69,43 @@ DATABASES = {
     }
 }
 
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 AUTHENTICATION_BACKENDS = [
     "users.authenticate.CustomBackend",
-    "django.contrib.auth.backends.ModelBackend",  # برای ادمین
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
-# Internationalization
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# Static files
 STATIC_URL = "static/"
-
-# Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --------- تنظیمات Auth ----------
-AUTH_USER_MODEL = "users.User"  # مدل سفارشی User
-
-# --------- تنظیمات CORS ----------
-
+AUTH_USER_MODEL = "users.User"
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # یا هر پورتی که React اجرا میشه
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "users.authenticate.CookieJWTAuthentication",
     ],
 }
-
-
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
@@ -132,13 +113,13 @@ SIMPLE_JWT = {
     "AUTH_COOKIE": "access",
     "AUTH_COOKIE_REFRESH": "refresh",
     "AUTH_COOKIE_HTTP_ONLY": True,
-    "AUTH_COOKIE_SECURE": False,  # در محیط واقعی true https
+    "AUTH_COOKIE_SECURE": False,
     "AUTH_COOKIE_SAMESITE": "Lax",
     "BLACKLIST_AFTER_ROTATION": True,
-    # برای راحتی در view ها
     "ACCESS_TOKEN_LIFETIME_SECONDS": int(timedelta(hours=1).total_seconds()),
     "REFRESH_TOKEN_LIFETIME_SECONDS": int(timedelta(days=7).total_seconds()),
 }
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -150,7 +131,7 @@ LOGGING = {
         "level": "DEBUG",
     },
 }
-# cache
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -158,11 +139,21 @@ CACHES = {
     }
 }
 
-CELERY_BROKER_URL = config("CELERY_BROKER_URL")  # برای ادرس سلری
+CELERY_BROKER_URL = config("CELERY_BROKER_URL")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 
-
-# Media files (for uploaded images)
 MEDIA_URL = "media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# Session Cookie settings for localhost development
+# Lax allows cookies on same-site requests (localhost:5173 -> localhost:8000)
+# None requires Secure=True which only works on HTTPS
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False
+SESSION_COOKIE_HTTPONLY = True
+SESSION_SAVE_EVERY_REQUEST = True  # Ensure session is saved on every request
+
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_HTTPONLY = False  # False allows JS to read CSRF token if needed

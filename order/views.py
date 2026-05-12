@@ -1,4 +1,3 @@
-# orders/views.py
 import logging
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -10,10 +9,12 @@ from products.permission import IsSeller
 from django.core.cache import cache
 from django.db.models import Count, Q, Prefetch
 
-from products.models import Products
-from .models import Order, OrderStatus, Address
+from products.models import Product
+
+from .models import Order, OrderStatus, Address, OrderStatusLog
 from .serializers import *
 from .session import OrderSession
+from .serializers import AddToCartSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -196,24 +197,44 @@ class DeleteCartAPIView(APIView):
 # افزودن محصول به Cart (Session)
 class AddOrderSessionAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = OrderSessionSerializer   # این را بررسی کنید – احتمالاً باید CartAddSerializer باشد
-
+    serializer_class = AddToCartSerializer
+    
     def post(self, request, product_id):
-        product = get_object_or_404(Products, id=product_id)
+        product = get_object_or_404(Product, id=product_id)
 
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         cart = OrderSession(request)
-        # توجه: typo در کد قبلی: validte_data -> validated_data
+        
+        # گرفتن داده‌ها
+        data = serializer.validated_data
+        quantity = data.get("quantity", 1)
+        material = data.get("material")
+        service = data.get("service")  # این می‌شه pricing_tab.tab_name
+        size_id = data.get("size")     # این می‌تونه null باشه
+        
+        # تبدیل size از ID به آبجکت (اگه وجود داشت)
+        size = None
+        if size_id:
+            try:
+                size = Size.objects.get(id=size_id)
+            except Size.DoesNotExist:
+                pass
+        
+        # فراخوانی متد add
         cart.add(
-            product,
-            serializer.validated_data.get("size"),
-            serializer.validated_data.get("material"),
-            serializer.validated_data.get("service"),
-            serializer.validated_data.get("quantity", 1),
+            product=product,
+            size=size,          # می‌تونه None باشه
+            material=material,
+            service=service,    # مثل "اتو"
+            quantity=quantity,
         )
-        return Response({"message": "محصول به سبد اضافه شد"}, status=status.HTTP_200_OK)
+        
+        return Response(
+            {"message": "محصول به سبد اضافه شد"}, 
+            status=status.HTTP_200_OK
+        )
 
 
 # ایجاد سفارش از Cart
@@ -619,3 +640,34 @@ class SearchOrderView(APIView):
 
         return Response(data)
 
+class OrderCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = OrderCreateSerializer(
+            data=request.data, 
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            try:
+                order = serializer.save()
+                return Response({
+                    "success": True,
+                    "order_id": order.id,
+                    "order_number": order.order_number,
+                    "final_price": order.final_price,
+                    "status": order.status,
+                    "message": "سفارش با موفقیت ثبت شد"
+                }, status=status.HTTP_201_CREATED)
+                
+            except Exception as e:
+                return Response({
+                    "success": False,
+                    "error": str(e)
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)

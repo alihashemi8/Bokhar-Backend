@@ -137,8 +137,8 @@ from .models import (
     Order, OrderItem, OrderStatus,
     PickUpTemplate, DeliveryTemplate, Address
 )
-from discount.engine import DiscountEngine
-from product.models import MaterialPrice, Size  # فرض بر این است که Size از product.models می‌آید
+from discounts.engine import DiscountEngine
+from products.models import MaterialPrice, Size  # فرض بر این است که Size از product.models می‌آید
 from .utils import (
     get_available_pickup_capacity,
     get_available_delivery_capacity
@@ -343,12 +343,9 @@ class OrderCreateSerializer(serializers.Serializer):
             "delivery_date": validated_data["delivery_date"],
             "delivery_shift": validated_data["delivery_shift"],
         }
-
-
-
-
-
-
-
-
+class AddToCartSerializer(serializers.Serializer):
+    quantity = serializers.IntegerField(min_value=1, default=1)
+    service = serializers.CharField(required=True)  # نام سرویس مثل "اتو"
+    material = serializers.CharField(required=True) # نام جنس مثل "مخمل"
+    size = serializers.IntegerField(required=False, allow_null=True)  # ID سایز
 

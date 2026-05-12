@@ -8,6 +8,7 @@ urlpatterns = [
     path("api/", include("users.urls")),
     path("api/", include("products.urls")),  
     path("api/discounts/", include("discounts.urls")),
+    path("api/", include("order.urls")),
     path("api/notifications/", include("notifications.urls")),
 ]
 # این قسمت برای نمایش فایل‌های media در حالت Development (DEBUG=True) هست

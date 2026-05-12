@@ -26,7 +26,7 @@ urlpatterns = [
     path('orders/update-status/delivery/', UpdateStatusDeliveryView.as_view(), name='update-status-delivery'),
     path('orders/<int:order_id>/status-history/',OrderStatusHistoryView.as_view(), name='order-status-history'),
 
-    path("products/search/", SearchOrderView, name="product-search"),
+    path("products/search/", SearchOrderView.as_view(), name="product-search"),
     path('rush-fee-settings/',
          RushFeeSettingListCreateView.as_view(),
          name='rush-fee-list-create'),
@@ -35,10 +35,10 @@ urlpatterns = [
          name='rush-fee-detail'),
 
     # Pickup Times
-    path('api/pickup-times/',
+    path('pickup-times/',
          PickupTimeListCreateView.as_view(),
          name='pickup-time-list-create'),
-    path('api/pickup-times/<int:pk>/',
+    path('pickup-times/<int:pk>/',
          PickupTimeDetailView.as_view(),
          name='pickup-time-detail'),
 

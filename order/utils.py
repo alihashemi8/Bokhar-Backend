@@ -77,6 +77,3 @@ def get_available_delivery_capacity(order_type, date, shift):
         capacity = template.capacity
         normal = used_all.filter(order_type="سفارش عادی").count()
         return capacity - normal
-
-
-
