@@ -671,3 +671,71 @@ class OrderCreateAPIView(APIView):
             "success": False,
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+    
+class UpdateCartItemAPIView(APIView):
+
+    def patch(self, request, id_unique, *args, **kwargs):
+        try:
+            quantity = request.data.get('quantity')
+            if quantity is None:
+                return Response(
+                    {"error": "quantity is required"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            quantity = int(quantity)
+            if quantity < 0:
+                return Response(
+                    {"error": "quantity must be positive"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            cart = OrderSession(request)
+            updated = cart.update_quantity(id_unique, quantity)
+            
+            if not updated:
+                return Response(
+                    {"error": "Item not found in cart"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            return Response({
+                "message": "Quantity updated successfully",
+                "items": list(cart),
+                "total_price": cart.total_price()
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError:
+            return Response(
+                {"error": "Invalid quantity format"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+class RemoveCartAPIView(APIView):
+    def post(self, request, id_unique=None, *args, **kwargs):
+        return self._remove_item(request, id_unique)
+    
+    def delete(self, request, id_unique=None, *args, **kwargs):
+        return self._remove_item(request, id_unique)
+    
+    def _remove_item(self, request, id_unique):
+        try:
+            if not id_unique:
+                return Response({"error": "id_unique required"}, status=400)
+            
+            cart = OrderSession(request)
+            if id_unique not in cart.cart:
+                return Response({"error": "Not found"}, status=404)
+                
+            cart.remove_cart(id_unique)
+            return Response({
+                "items": list(cart),
+                "total_price": cart.total_price()
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)

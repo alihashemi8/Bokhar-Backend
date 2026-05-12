@@ -178,4 +178,16 @@ class OrderSession:
     def clear(self):
         self.session["cart"] = {}
         self.session.modified = True
+        
+    def update_quantity(self, id_unique, quantity):
+        """Update quantity to a specific number (not increment)"""
+        if id_unique in self.cart:
+            if quantity > 0:
+                self.cart[id_unique]['quantity'] = quantity
+            else:
+                # اگه صفر یا کمتر بود، حذف کن
+                del self.cart[id_unique]
+            self.session.modified = True
+            return True
+        return False
 

@@ -9,6 +9,7 @@ urlpatterns = [
     path("cart/remove/<str:id_unique>/", RemoveCartAPIView.as_view(), name="cart_remove_item"),
     path("cart/delete/", DeleteCartAPIView.as_view(), name="cart_delete"),
     path("cart/add/<int:product_id>/", AddOrderSessionAPIView.as_view(), name="cart_add"),
+    path('cart/<str:id_unique>/', UpdateCartItemAPIView.as_view(), name='update_cart_item'),
 
     # سفارش
     path("order/create/", CreateOrderAPIView.as_view(), name="order_create"),
