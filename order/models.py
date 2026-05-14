@@ -3,78 +3,29 @@ from textwrap import dedent
 from django.db import models
 from django.utils import timezone
 from datetime import time, datetime
-from products.models import *
+
+from rest_framework.exceptions import ValidationError
+
+from product.models import *
 from users.models import Address, User
 import random
 import string
 from datetime import timedelta
-from discounts.models import (      
+from discount.models import (          # ← ایمپورت تخفیف‌های جدید
     ProductDiscount,
     GlobalDiscount,
     Coupon,
 )
+import uuid
+
+
 
 
 def get_deleted_users():
     user, _ = User.objects.get_or_create(phone="12345678901", fullname="کاربر حدف شده.")
     return user
 
-def generate_discount_code(length=8):
-    characters = string.ascii_uppercase + string.digits
-    return "".join(random.choices(characters, k=length))
-
-"""
-class DiscountCode(models.Model):
-    name = models.CharField(max_length=20, unique=True, blank=True)
-    percent = models.PositiveIntegerField(default=0)
-    amount = models.PositiveIntegerField(default=0)
-    quantity = models.PositiveIntegerField(default=1)
-    start_date = models.DateTimeField(default=timezone.now,null=True,blank=True)
-    end_date = models.DateTimeField(null=True,blank=True)
-
-    @property
-    def is_active_code(self):
-        return (
-            self.end_date >= timezone.now()
-            and self.quantity > 0
-        )
-
-    def save(self, *args, **kwargs):
-        if not self.name:
-            while True:
-                code = generate_discount_code()
-                if not DiscountCode.objects.filter(name=code).exists():
-                    self.name = code
-                    break
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return self.name
-
-
-
-class DiscountUsage(models.Model):
-    discount_code = models.ForeignKey(
-        DiscountCode, on_delete=models.CASCADE, related_name="usages"
-    )
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="discount_usages"
-    )
-    used_count = models.PositiveIntegerField(default=0)
-    used_at = models.DateTimeField(auto_now_add=True)
-    description = models.TextField(null=True, blank=True)
-    order = models.ForeignKey('Order',related_name='discount_usages', on_delete=models.CASCADE)
-
-
-    def __str__(self):
-        return f"{self.user} - {self.discount_code}"""
-
-# orders/models.py
-
 class TimeRange(models.TextChoices):
-
-
-
     MORNING  = "morning",  "صبح (۸–۱۳)"   # ۸ صبح تا ۱۳
     EVENING  = "evening",  "عصر (۱۶–۲۰)"  # ۱۶ تا ۲۰
 
@@ -118,7 +69,6 @@ class PickUpTemplate(models.Model):
         default=TimeRange.MORNING,
         unique=True,
     )
-    capacity     = models.PositiveIntegerField(default=20)
     base_price   = models.PositiveIntegerField(default=0)
     price_add    = models.PositiveIntegerField(default=0)
     is_active    = models.BooleanField(default=True)
@@ -129,7 +79,7 @@ class PickUpTemplate(models.Model):
         unique_together     = []          # اگر نیاز دارید اضافه کنید
 
     def is_available(self):
-        return self.is_active and self.used_count < self.capacity
+        return self.is_active
 
     def __str__(self):
         return f"تحویل‌گیری | {self.get_time_shift_display()}"
@@ -143,7 +93,6 @@ class DeliveryTemplate(models.Model):
         default=TimeRange.MORNING,
         unique= True
     )
-    capacity            = models.PositiveIntegerField(default=20)
     urgent_24_capacity  = models.PositiveIntegerField(default=5)
     urgent_48_capacity  = models.PositiveIntegerField(default=10)
     base_price          = models.PositiveIntegerField(default=0)
@@ -167,9 +116,6 @@ class OrderStatus(models.TextChoices):
     CANCELED = "canceled", "لغو شده  "
     RETURNED = "returned" , "برگشتی "
 
-
-
-
 class Order(models.Model):
     user = models.ForeignKey(
         User, on_delete=models.SET(get_deleted_users), related_name="orders"
@@ -185,6 +131,7 @@ class Order(models.Model):
         null=True, blank=True,
         related_name="orders"
     )
+
 
 
     pickup_date = models.DateField()
@@ -221,7 +168,7 @@ class Order(models.Model):
     paid_at = models.DateTimeField(null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     create_time = models.DateTimeField(auto_now_add=True)
-    order_type = models.CharField(max_length=20)    # "سفارش عادی", "سفارش فوری 24 ساعته", ...
+    order_type = models.CharField(max_length=20,null=True,blank = True)    # "سفارش عادی", "سفارش فوری 24 ساعته", ...
 
     class Meta:
         indexes = [

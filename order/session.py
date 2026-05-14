@@ -4,6 +4,7 @@ from products.models import *
 from order.models import *
 from products.models import *
 
+
 class OrderSession:
     def __init__(self, request):
         self.request = request
@@ -22,7 +23,7 @@ class OrderSession:
                 product_id = item.get('product_id')
                 pricing_tab_id = item.get('pricing_tab_id')
                 material = item.get('material')
-                
+
                 if not all([product_id, pricing_tab_id, material]):
                     # دیتای ناقص/قدیمی رو حذف کن
                     del self.cart[key]
@@ -31,11 +32,11 @@ class OrderSession:
 
                 product = Product.objects.get(id=product_id)
                 pricing_tab = ProductPricingTab.objects.get(id=pricing_tab_id)
-                
+
                 # رفع باگ: چک کردن سایز با try-except برای ValueError
                 size = None
                 size_display = item.get('size_display', "بدون سایز")
-                
+
                 raw_size = item.get('size')
                 if raw_size and raw_size != "none":  # چک کردن "none" string هم
                     try:
@@ -59,7 +60,7 @@ class OrderSession:
                     current_price = int(item.get('price', 0))
 
                 quantity = item.get('quantity', 1)
-                
+
                 # آماده‌سازی دیتای خروجی (فقط dict ساده، نه آبجکت جنگو)
                 yield {
                     'id_unique': key,
@@ -74,7 +75,7 @@ class OrderSession:
                     'total_price': current_price * quantity,
                     'price': current_price,  # برای سازگاری با کد قدیمی
                 }
-                
+
             except (Product.DoesNotExist, ProductPricingTab.DoesNotExist):
                 # اگر محصول یا سرویس حذف شده بود، از سبد حذف کن
                 del self.cart[key]
@@ -96,20 +97,20 @@ class OrderSession:
         """
         Wrapper for add_cart - converts objects to IDs
         """
-        from products.models import ProductPricingTab
-        
+        from product.models import ProductPricingTab
+
         try:
             pricing_tab = ProductPricingTab.objects.get(
-                tab_name=service, 
+                tab_name=service,
                 product=product
             )
         except ProductPricingTab.DoesNotExist:
             raise ValueError(f"سرویس '{service}' برای این محصول وجود ندارد.")
-        
+
         product_id = product.id
         pricing_tab_id = pricing_tab.id
         size_id = size.id if size else None
-        
+
         self.add_cart(
             product_id=product_id,
             pricing_tab_id=pricing_tab_id,
@@ -124,7 +125,7 @@ class OrderSession:
             pricing_tab = ProductPricingTab.objects.get(id=pricing_tab_id, product=product)
         except (Product.DoesNotExist, ProductPricingTab.DoesNotExist):
             raise ValueError("محصول یا سرویس نامعتبر است.")
-            
+
         try:
             material_price = MaterialPrice.objects.get(material=material, pricing_tab=pricing_tab)
             price = material_price.price
@@ -141,7 +142,7 @@ class OrderSession:
                 raise ValueError("این سایز وجود ندارد.")
 
         id_unique = self.unique_code(product_id, pricing_tab_id, size_id, material)
-        
+
         if id_unique not in self.cart:
             self.cart[id_unique] = {
                 "quantity": quantity,
@@ -156,7 +157,7 @@ class OrderSession:
             }
         else:
             self.cart[id_unique]["quantity"] += quantity
-            
+
         self.session["cart"] = self.cart
         self.session.modified = True
 
@@ -178,7 +179,7 @@ class OrderSession:
     def clear(self):
         self.session["cart"] = {}
         self.session.modified = True
-        
+
     def update_quantity(self, id_unique, quantity):
         """Update quantity to a specific number (not increment)"""
         if id_unique in self.cart:
@@ -190,4 +191,3 @@ class OrderSession:
             self.session.modified = True
             return True
         return False
-
