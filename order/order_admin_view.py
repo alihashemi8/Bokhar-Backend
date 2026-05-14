@@ -1,4 +1,3 @@
-# orders/views.py
 import logging
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -11,7 +10,8 @@ from django.core.cache import cache
 from django.db.models import Count, Q, Prefetch
 
 from product.models import Product
-from .models import Order, OrderStatus, Address
+
+from .models import Order, OrderStatus, Address, OrderStatusLog
 from .serializers import *
 from .session import OrderSession
 
@@ -22,277 +22,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .models import RushFeeSetting, PickUpTemplate, DeliveryTemplate
-from .serializers import (
-    RushFeeSettingSerializer,
-    PickupTimeSerializer,
-    DeliveryTimeSerializer,
-    UpdateRushFeeSerializer,
-    UpdatePickupTimeSerializer,
-    UpdateDeliveryTimeSerializer
-)
-
-
-class RushFeeSettingListCreateView(APIView):
-    """
-    لیست و ایجاد تنظیمات تعرفه فوری
-    """
-
-    def get(self, request):
-        rush_fees = RushFeeSetting.objects.all()
-        serializer = RushFeeSettingSerializer(rush_fees, many=True)
-        return Response(serializer.data)
-
-    def post(self, request):
-        serializer = RushFeeSettingSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class RushFeeSettingDetailView(APIView):
-    """
-    دریافت، به‌روزرسانی و حذف یک تنظیمات تعرفه فوری خاص
-    """
-
-    def get_object(self, pk):
-        return get_object_or_404(RushFeeSetting, pk=pk)
-
-    def get(self, request, pk):
-        rush_fee = self.get_object(pk)
-        serializer = RushFeeSettingSerializer(rush_fee)
-        return Response(serializer.data)
-
-    def put(self, request, pk):
-        rush_fee = self.get_object(pk)
-        serializer = UpdateRushFeeSerializer(rush_fee, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def patch(self, request, pk):
-        rush_fee = self.get_object(pk)
-        serializer = UpdateRushFeeSerializer(rush_fee, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, pk):
-        rush_fee = self.get_object(pk)
-        rush_fee.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class PickupTimeListCreateView(APIView):
-    """
-    لیست و ایجاد ظرفیت‌های تحویل گرفتن
-    """
-
-    def get(self, request):
-        pickup_times = PickUpTemplate.objects.all()
-        serializer = PickupTimeSerializer(pickup_times, many=True)
-        return Response(serializer.data)
-
-    def post(self, request):
-        serializer = PickupTimeSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class PickupTimeDetailView(APIView):
-    """
-    دریافت، به‌روزرسانی و حذف یک ظرفیت تحویل گرفتن خاص
-    """
-
-    def get_object(self, pk):
-        return get_object_or_404(PickUpTemplate, pk=pk)
-
-    def get(self, request, pk):
-        pickup_time = self.get_object(pk)
-        serializer = PickupTimeSerializer(pickup_time)
-        return Response(serializer.data)
-
-    def put(self, request, pk):
-        pickup_time = self.get_object(pk)
-        serializer = UpdatePickupTimeSerializer(pickup_time, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-class DeliveryTimeListCreateView(APIView):
-    """
-    لیست و ایجاد زمان‌های تحویل
-    """
-
-    def get(self, request):
-        delivery_times = DeliveryTemplate.objects.all()
-        serializer = DeliveryTimeSerializer(delivery_times, many=True)
-        return Response(serializer.data)
-
-    def post(self, request):
-        serializer = DeliveryTimeSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class DeliveryTimeDetailView(APIView):
-    """
-    دریافت، به‌روزرسانی و حذف یک زمان تحویل خاص
-    """
-
-    def get_object(self, pk):
-        return get_object_or_404(DeliveryTemplate, pk=pk)
-
-    def get(self, request, pk):
-        delivery_time = self.get_object(pk)
-        serializer = DeliveryTimeSerializer(delivery_time)
-        return Response(serializer.data)
-
-    def put(self, request, pk):
-        delivery_time = self.get_object(pk)
-        serializer = UpdateDeliveryTimeSerializer(delivery_time, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class CartAPIView(APIView):
-    def get(self, request):
-        cart = OrderSession(request)
-        return Response({"cart": list(cart)})
-
-
-# حذف آیتم از سبد خرید
-class RemoveCartAPIView(APIView):
-    def post(self, request, id_unique):
-        cart = OrderSession(request)
-        cart.remove(id_unique)
-        return Response(
-            {"message": "تعداد محصول شما کم شد", "cart": list(cart)},
-            status=status.HTTP_200_OK,
-        )
-
-
-# حذف کل سبد خرید
-class DeleteCartAPIView(APIView):
-    def post(self, request):
-        cart = OrderSession(request)
-        cart.clear()
-        return Response(
-            {"message": "سبد خرید شما خالی شد"},
-            status=status.HTTP_200_OK,
-        )
-
-
-# افزودن محصول به Cart (Session)
-class AddOrderSessionAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = OrderSessionSerializer   # این را بررسی کنید – احتمالاً باید CartAddSerializer باشد
-
-    def post(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id)
-
-        serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        cart = OrderSession(request)
-        # توجه: typo در کد قبلی: validte_data -> validated_data
-        cart.add(
-            product,
-            serializer.validated_data.get("size"),
-            serializer.validated_data.get("material"),
-            serializer.validated_data.get("service"),
-            serializer.validated_data.get("quantity", 1),
-        )
-        return Response({"message": "محصول به سبد اضافه شد"}, status=status.HTTP_200_OK)
-
-
-# ایجاد سفارش از Cart
-class CreateOrderAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = OrderCreateSerializer
-
-    def post(self, request):
-        serializer = self.serializer_class(
-            data=request.data,
-            context={'request': request}
-        )
-        serializer.is_valid(raise_exception=True)
-        order = serializer.save()
-        logger.info(f"سفارش {order.id} توسط کاربر {request.user.id} ایجاد شد.")
-
-        return Response(status=status.HTTP_201_CREATED)
-
-
-# حذف یک سفارش (در حالت رزرو یا پرداخت نشده)
-class DeleteOrderAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, id):
-        order = get_object_or_404(Order, id=id, user=request.user)
-        # فقط سفارش‌های کنسل شده یا رزرو منقضی را می‌توان حذف کرد (یا منطق خودتان)
-        if order.status not in [OrderStatus.RESERVED, OrderStatus.CANCELED]:
-            return Response(
-                {"error": "امکان حذف این سفارش وجود ندارد."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        order.delete()
-        logger.info(f"سفارش {id} توسط کاربر {request.user.id} حذف شد.")
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-# آدرس‌ها
-class CreateAddressView(APIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = AddressSerializer
-
-    def post(self, request):
-        serializer = self.serializer_class(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        logger.info(f"آدرس جدید برای کاربر {request.user.id} ایجاد شد.")
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-class ListAddressAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = AddressDetailSerializer
-
-    def get(self, request):
-        addresses = Address.objects.filter(user=request.user)
-        serializer = self.serializer_class(addresses, many=True)
-        return Response({'data': serializer.data})
-
-
-class UpdateAddressAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = UpdateAddressSerializer
-
-    def put(self, request, id):
-        address = get_object_or_404(Address, id=id, user=request.user)
-        serializer = self.serializer_class(address, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response({"data": serializer.data})
-
-
-class DeleteAddressAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def delete(self, request, id):
-        address = get_object_or_404(Address, id=id, user=request.user)
-        address.delete()
-        return Response({"message": "آدرس شما حذف شد."})
-
 
 
 
@@ -354,7 +83,7 @@ class WashStatusView(APIView):
 from django.utils import timezone
 
 
-class DelivryStatusView(APIView):
+class DeliveryStatusView(APIView):
     permission_classes = [IsSeller]
 
     def get(self, request):
@@ -618,4 +347,5 @@ class SearchOrderView(APIView):
             })
 
         return Response(data)
+
 

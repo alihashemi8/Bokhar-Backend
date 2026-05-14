@@ -6,28 +6,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_available_pickup_capacity(date, shift):
+def get_available_pickup_capacity(shift):
     """ظرفیت خالی تحویل‌گیری برای تاریخ و شیفت مشخص"""
     try:
-        template = PickUpTemplate.objects.get(time_shift=shift, is_active=True)
-    except PickUpTemplate.DoesNotExist:
+        template = DeliveryTemplate.objects.get(time_shift=shift, is_active=True)
+    except DeliveryTemplate.DoesNotExist:
         return 0
-    # سفارش‌هایی که ظرفیت را اشغال می‌کنند:
-    #   - وضعیت‌های دائم پس از پرداخت
-    used = Order.objects.filter(
-        pickup_date=date,
-        pickup_shift=shift
-    ).filter(
-        models.Q(status=OrderStatus.CANCELED) |
-        models.Q(status__in=[
-            OrderStatus.PAID,
-            OrderStatus.PICKED_UP,
-            OrderStatus.WASHING,
-            OrderStatus.DELIVERED
-        ])
-    ).count()
 
-    return template.capacity - used
+
 
 
 def get_available_delivery_capacity(order_type, date, shift):
@@ -48,7 +34,6 @@ def get_available_delivery_capacity(order_type, date, shift):
 
     # سفارش‌هایی که ظرفیت تحویل‌دهی را اشغال می‌کنند
     used_all = base_orders.filter(
-        models.Q(status=OrderStatus.CANCELED) |
         models.Q(status__in=[
             OrderStatus.PAID,
             OrderStatus.PICKED_UP,
@@ -63,20 +48,13 @@ def get_available_delivery_capacity(order_type, date, shift):
         capacity = template.urgent_24_capacity
         # سفارش‌های ۲۴ ساعته را از بین use_all جدا می‌کنیم
         urgent_24 = used_all.filter(order_type="سفارش فوری 24 ساعته").count()
-        return capacity - urgent_24
+        return max(0, capacity - urgent_24)
 
     elif order_type == "48ساعته":
         # ظرفیت ۴۸ ساعته (در صورت وجود فیلد مجزا)؛
         # اگر فیلد جداگانه برای ۴۸ ساعته ندارید، می‌توانید از ظرفیت کلی استفاده کنید
         capacity = template.urgent_48_capacity   # فیلد urgent_48_capacity در مدل موجود است
         urgent_48 = used_all.filter(order_type="48ساعته").count()
-        return capacity - urgent_48
-
-    else:  # سفارش عادی
-        # ظرفیت کلی منهای سفارش‌های عادی ثبت‌شده
-        capacity = template.capacity
-        normal = used_all.filter(order_type="سفارش عادی").count()
-        return capacity - normal
-
+        return max(0, capacity - urgent_48)
 
 

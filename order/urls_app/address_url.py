@@ -1,0 +1,15 @@
+from django.urls import path
+from ..address_views import *
+app_name = "order"
+
+urlpatterns = [
+
+
+    # آدرس‌ها
+    path("address/create/", CreateAddressView.as_view(), name="address_create"),
+    path("address/list/", ListAddressAPIView.as_view(), name="address_list"),
+    path("address/update/<int:id>/", UpdateAddressAPIView.as_view(), name="address_update"),
+    path("address/delete/<int:id>/", DeleteAddressAPIView.as_view(), name="address_delete"),
+
+
+]
