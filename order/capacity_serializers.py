@@ -5,15 +5,16 @@ class RushFeeSettingSerializer(serializers.ModelSerializer):
     class Meta:
         model = RushFeeSetting
         fields = [
-            'id', 
-            'is_active',
-            'tomorrow_fee', 
-            'percent_tomorrow_fee',
-            'day_after_tomorrow_fee', 
-            'percent_day_after_tomorrow_fee',
-            'updated_at'
+            "id",
+            "is_24h_enabled",
+            "is_48h_enabled",
+            "fee_24h",
+            "fee_48h",
+            "percent_24h",
+            "percent_48h",
+            "updated_at",
         ]
-        read_only_fields = ['updated_at']
+
 
 class DeliveryTemplateSerializer(serializers.ModelSerializer):
     class Meta:

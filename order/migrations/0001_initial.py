@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
                 ("is_active", models.BooleanField(default=True)),
             ],
             options={
-                "verbose_name": "شیفت تحویل\u200cدهی",
+                "verbose_name": "شیفت تحویل‌دهی",
             },
         ),
         migrations.CreateModel(
@@ -77,7 +77,7 @@ class Migration(migrations.Migration):
                 ("is_active", models.BooleanField(default=True)),
             ],
             options={
-                "verbose_name": "شیفت تحویل\u200cگیری",
+                "verbose_name": "شیفت تحویل‌گیری",
             },
         ),
         migrations.CreateModel(
@@ -179,7 +179,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="orders",
-                        to="discount.coupon",
+                        to="discounts.coupon",
                     ),
                 ),
                 (
@@ -216,7 +216,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="order_items",
-                        to="discount.productdiscount",
+                        to="discounts.productdiscount",
                     ),
                 ),
                 (
@@ -232,7 +232,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="order_items",
-                        to="product.productpricingtab",
+                        to="products.productpricingtab",
                     ),
                 ),
                 (
@@ -240,7 +240,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="order_items",
-                        to="product.product",
+                        to="products.product",
                     ),
                 ),
                 (
@@ -250,7 +250,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="order_items",
-                        to="product.size",
+                        to="products.size",
                     ),
                 ),
             ],
@@ -273,7 +273,8 @@ class Migration(migrations.Migration):
                 (
                     "order",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE, to="order.order"
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="order.order",
                     ),
                 ),
                 (
@@ -291,7 +292,8 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name="order",
             index=models.Index(
-                fields=["status", "user"], name="order_order_status_e3f191_idx"
+                fields=["status", "user"],
+                name="order_order_status_e3f191_idx",
             ),
         ),
         migrations.AddIndex(

@@ -20,18 +20,19 @@ class RushFeeSettingView(APIView):
     permission_classes = [IsAdminUser]  # فقط ادمین می‌تونه تغییر بده
     
     def get_object(self):
-        """همیشه یک رکورد برمی‌گردونه (اولیه رو می‌سازه اگه نباشه)"""
         obj, created = RushFeeSetting.objects.get_or_create(
             pk=1,
             defaults={
-                'tomorrow_fee': 50000,
-                'day_after_tomorrow_fee': 25000,
-                'percent_tomorrow_fee': 20,
-                'percent_day_after_tomorrow_fee': 10,
-                'is_active': True
+                "fee_24h": 50000,
+                "fee_48h": 25000,
+                "percent_24h": 0,
+                "percent_48h": 0,
+                "is_24h_enabled": True,
+                "is_48h_enabled": True,
             }
         )
         return obj
+
 
     def get(self, request):
         """دریافت تنظیمات"""
@@ -194,30 +195,37 @@ class OrderValidationView(APIView):
         }
         
         # تعیین نوع سفارش و هزینه
-        settings = RushFeeSetting.objects.filter(is_active=True).first()
-        
-        if hours_diff <= 24:
+        settings = RushFeeSetting.objects.first()
+
+        if not settings:
+            return Response(response_data)
+
+        if hours_diff <= 24 and settings.is_24h_enabled:
             response_data['delivery_type'] = '24h'
-            if settings:
-                if settings.percent_tomorrow_fee > 0:
-                    fee = int(subtotal * settings.percent_tomorrow_fee / 100)
-                    response_data['rush_fee_percent'] = settings.percent_tomorrow_fee
-                else:
-                    fee = settings.tomorrow_fee
-                response_data['rush_fee'] = fee
-                response_data['total_price'] = subtotal + fee
-        elif hours_diff <= 48:
+
+            if settings.percent_24h > 0:
+                fee = int(subtotal * settings.percent_24h / 100)
+                response_data['rush_fee_percent'] = settings.percent_24h
+            else:
+                fee = settings.fee_24h
+
+            response_data['rush_fee'] = fee
+            response_data['total_price'] = subtotal + fee
+
+        elif hours_diff <= 48 and settings.is_48h_enabled:
             response_data['delivery_type'] = '48h'
-            if settings:
-                if settings.percent_day_after_tomorrow_fee > 0:
-                    fee = int(subtotal * settings.percent_day_after_tomorrow_fee / 100)
-                    response_data['rush_fee_percent'] = settings.percent_day_after_tomorrow_fee
-                else:
-                    fee = settings.day_after_tomorrow_fee
-                response_data['rush_fee'] = fee
-                response_data['total_price'] = subtotal + fee
-        
-        # چک کردن ظرفیت
+
+            if settings.percent_48h > 0:
+                fee = int(subtotal * settings.percent_48h / 100)
+                response_data['rush_fee_percent'] = settings.percent_48h
+            else:
+                fee = settings.fee_48h
+
+            response_data['rush_fee'] = fee
+            response_data['total_price'] = subtotal + fee
+
+                
+                # چک کردن ظرفیت
         template = DeliveryTemplate.objects.first()
         if template:
             if response_data['delivery_type'] == '24h':

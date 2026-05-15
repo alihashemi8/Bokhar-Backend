@@ -53,12 +53,24 @@ FRONTEND_TIME_MAP = {
 
 #برای اینکه قیمت های 24و 48 ساعته حساب کنه
 class RushFeeSetting(models.Model):
-    tomorrow_fee = models.PositiveIntegerField(default=50000)
-    day_after_tomorrow_fee = models.PositiveIntegerField(default=25000)
-    is_active = models.BooleanField(default=True)
+    # فیلدهای جدید مطابق فرانت‌اند
+    fee_24h = models.PositiveIntegerField(default=50000, verbose_name="هزینه ۲۴ ساعته")
+    fee_48h = models.PositiveIntegerField(default=25000, verbose_name="هزینه ۴۸ ساعته")
+    
+    is_24h_enabled = models.BooleanField(default=True, verbose_name="فعال بودن ۲۴ ساعته")
+    is_48h_enabled = models.BooleanField(default=True, verbose_name="فعال بودن ۴۸ ساعته")
+    
+    percent_24h = models.PositiveIntegerField(default=0, verbose_name="درصد ۲۴ ساعته")
+    percent_48h = models.PositiveIntegerField(default=0, verbose_name="درصد ۴۸ ساعته")
+    
     updated_at = models.DateTimeField(auto_now=True)
-    percent_tomorrow_fee = models.PositiveIntegerField(default=0)#darsad baray gheimat faktor
-    percent_day_after_tomorrow_fee = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "تنظیمات هزینه فوری"
+        verbose_name_plural = "تنظیمات هزینه فوری"
+
+    def __str__(self):
+        return f"۲۴ساعته: {self.fee_24h} | ۴۸ساعته: {self.fee_48h}"
 
 
 class PickUpTemplate(models.Model):
@@ -271,27 +283,43 @@ class Order(models.Model):
         return "سفارش عادی"
 
     def calculate_rush_fee(self):
-        settings = RushFeeSetting.objects.filter(is_active=True).first()
+        settings = RushFeeSetting.objects.first()  # یا فیلتر بر اساس فعال بودن
         if not settings:
             return 0
+        
         order_type = self.order_range_type()
+        
         if order_type == "سفارش فوری 24 ساعته":
-            return settings.tomorrow_fee
+            if settings.is_24h_enabled:  # چک کردن فعال بودن
+                return settings.fee_24h
+            return 0
+            
         if order_type == "48ساعته":
-            return settings.day_after_tomorrow_fee
+            if settings.is_48h_enabled:  # چک کردن فعال بودن
+                return settings.fee_48h
+            return 0
+            
         return 0
 
     def calculate_percent_fee(self):
-        settings = RushFeeSetting.objects.filter(is_active=True).first()
+        settings = RushFeeSetting.objects.first()
         if not settings:
             return 0
+            
         order_type = self.order_range_type()
-        # درصد رو برمی‌گردونیم (مثلاً 10 یعنی ۱۰٪ افزایش)
+        
         if order_type == "سفارش فوری 24 ساعته":
-            return settings.percent_tomorrow_fee
+            if settings.is_24h_enabled:
+                return settings.percent_24h
+            return 0
+            
         if order_type == "48ساعته":
-            return settings.percent_day_after_tomorrow_fee
+            if settings.is_48h_enabled:
+                return settings.percent_48h
+            return 0
+            
         return 0
+
 
     def save(self, *args, **kwargs):
         if not self.pk:
