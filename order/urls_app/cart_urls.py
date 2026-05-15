@@ -1,21 +1,21 @@
 from django.urls import path
-from ..cart_views import *
+from ..cart_views import *  
 
 app_name = "order"
 
 urlpatterns = [
     # مشاهده سبد خرید
-    path("cart/", CartAPIView.as_view(), name="cart_list"),
+    path("", CartAPIView.as_view(), name="cart_list"),  # ✅ حذف cart/ از اول
 
     # افزودن محصول به سبد
-    path("cart/add/<int:product_id>/", AddOrderSessionAPIView.as_view(), name="cart_add"),
+    path("add/<int:product_id>/", AddOrderSessionAPIView.as_view(), name="cart_add"),  # ✅ حذف cart/
 
-    # بروزرسانی تعداد یک آیتم (PATCH)  ← اضافه شد
-    path("cart/update/<str:id_unique>/", UpdateCartItemAPIView.as_view(), name="cart_update_item"),
+    # بروزرسانی تعداد یک آیتم
+    path("update/<str:id_unique>/", UpdateCartItemAPIView.as_view(), name="cart_update_item"),  # ✅ حذف cart/
 
-    # حذف یک آیتم (POST / DELETE)
-    path("cart/remove/<str:id_unique>/", RemoveCartAPIView.as_view(), name="cart_remove_item"),
+    # حذف یک آیتم
+    path("remove/<str:id_unique>/", RemoveCartAPIView.as_view(), name="cart_remove_item"),  # ✅ حذف cart/
 
     # خالی کردن کل سبد
-    path("cart/delete/", DeleteCartAPIView.as_view(), name="cart_delete"),
+    path("delete/", DeleteCartAPIView.as_view(), name="cart_delete"),  # ✅ حذف cart/
 ]

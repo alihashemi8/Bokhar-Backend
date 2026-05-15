@@ -5,11 +5,11 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from product.permission import IsSeller
+from products.permission import IsSeller
 from django.core.cache import cache
 from django.db.models import Count, Q, Prefetch
 
-from product.models import Product
+from products.models import Product
 
 from .models import Order, OrderStatus, Address, OrderStatusLog
 from .serializers import *

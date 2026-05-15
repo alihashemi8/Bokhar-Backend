@@ -1,9 +1,6 @@
 from order.models import *
 from products.models import *
 
-from order.models import *
-from products.models import *
-
 
 class OrderSession:
     def __init__(self, request):
@@ -16,6 +13,9 @@ class OrderSession:
         self.cart = cart
 
     def __iter__(self):
+        """
+        تکرار روی آیتم‌های سبد با پشتیبانی از original_price برای تخفیف
+        """
         cart = self.cart.copy()
         for key, item in cart.items():
             try:
@@ -36,32 +36,34 @@ class OrderSession:
                 # رفع باگ: چک کردن سایز با try-except برای ValueError
                 size = None
                 size_display = item.get('size_display', "بدون سایز")
-
                 raw_size = item.get('size')
-                if raw_size and raw_size != "none":  # چک کردن "none" string هم
+                
+                if raw_size and raw_size != "none":
                     try:
-                        # تبدیل به int برای اطمینان
                         size_id = int(raw_size)
                         size = Size.objects.get(id=size_id)
                     except (ValueError, TypeError, Size.DoesNotExist):
-                        # اگه سایز نامعتبر بود، بدون سایز ادامه بده
                         size = None
                         size_display = "سایز نامعتبر"
 
-                # گرفتن قیمت متریال
+                # گرفتن قیمت فعلی متریال
                 try:
                     material_price = MaterialPrice.objects.get(
                         pricing_tab=pricing_tab,
                         material=material
                     )
-                    current_price = material_price.price
+                    current_price = int(material_price.price)
                 except MaterialPrice.DoesNotExist:
                     # اگه قیمت متریال پیدا نشد، از قیمت ذخیره شده استفاده کن
                     current_price = int(item.get('price', 0))
 
                 quantity = item.get('quantity', 1)
+                
+                # محاسبه original_price (اگه تخفیف داری، اینجا لاجیکش رو بنویس)
+                # فعلاً اگر original_price ذخیره نشده بود، current_price رو قرار بده
+                original_price = int(item.get('original_price', current_price))
 
-                # آماده‌سازی دیتای خروجی (فقط dict ساده، نه آبجکت جنگو)
+                # آماده‌سازی دیتای خروجی
                 yield {
                     'id_unique': key,
                     'product_id': product_id,
@@ -71,8 +73,10 @@ class OrderSession:
                     'size_display': size_display,
                     'material': material,
                     'service': item.get('pricing_tab_service', pricing_tab.tab_name),
-                    'unit_price': current_price,
+                    'unit_price': current_price,        # قیمت نهایی (با تخفیف)
+                    'original_price': original_price,   # قیمت اصلی (قبل تخفیف)
                     'total_price': current_price * quantity,
+                    'original_total': original_price * quantity,  # جمع قیمت اصلی
                     'price': current_price,  # برای سازگاری با کد قدیمی
                 }
 
@@ -97,7 +101,7 @@ class OrderSession:
         """
         Wrapper for add_cart - converts objects to IDs
         """
-        from product.models import ProductPricingTab
+        from products.models import ProductPricingTab
 
         try:
             pricing_tab = ProductPricingTab.objects.get(
@@ -129,6 +133,7 @@ class OrderSession:
         try:
             material_price = MaterialPrice.objects.get(material=material, pricing_tab=pricing_tab)
             price = material_price.price
+            original_price = material_price.original_price if hasattr(material_price, 'original_price') else price
         except MaterialPrice.DoesNotExist:
             raise ValueError(f"جنس {material} برای این محصول نیست")
 
@@ -146,7 +151,7 @@ class OrderSession:
         if id_unique not in self.cart:
             self.cart[id_unique] = {
                 "quantity": quantity,
-                "size": size_id,  # می‌تونه None باشه
+                "size": size_id,
                 "size_display": size_display_str,
                 "material": material,
                 "product_id": product_id,
@@ -154,6 +159,7 @@ class OrderSession:
                 "pricing_tab_id": pricing_tab.id,
                 "pricing_tab_service": pricing_tab.tab_name,
                 "price": str(price),
+                "original_price": str(original_price),  # ذخیره قیمت اصلی
             }
         else:
             self.cart[id_unique]["quantity"] += quantity
@@ -162,13 +168,40 @@ class OrderSession:
         self.session.modified = True
 
     def remove_cart(self, id_unique):
+        """
+        کاهش تعداد به اندازه 1 (برای دکمه منها)
+        """
         if id_unique in self.cart:
-            if self.cart[id_unique]["quantity"] > 0:
+            if self.cart[id_unique]["quantity"] > 1:
                 self.cart[id_unique]["quantity"] -= 1
-                if self.cart[id_unique]["quantity"] == 0:
-                    del self.cart[id_unique]
-            self.session["cart"] = self.cart
+            else:
+                # اگه 1 بود، حذفش کن
+                del self.cart[id_unique]
             self.session.modified = True
+
+    def delete_item(self, id_unique):
+        """
+        حذف کامل آیتم از سبد (برای دکمه سطل زباله)
+        """
+        if id_unique in self.cart:
+            del self.cart[id_unique]
+            self.session.modified = True
+            return True
+        return False
+
+    def update_quantity(self, id_unique, quantity):
+        """
+        تغییر مستقیم تعداد به عدد مشخص (نه increment/decrement)
+        """
+        if id_unique in self.cart:
+            if quantity > 0:
+                self.cart[id_unique]['quantity'] = quantity
+            else:
+                # اگه صفر یا کمتر بود، حذف کن
+                del self.cart[id_unique]
+            self.session.modified = True
+            return True
+        return False
 
     def total_price(self):
         total = 0
@@ -179,15 +212,3 @@ class OrderSession:
     def clear(self):
         self.session["cart"] = {}
         self.session.modified = True
-
-    def update_quantity(self, id_unique, quantity):
-        """Update quantity to a specific number (not increment)"""
-        if id_unique in self.cart:
-            if quantity > 0:
-                self.cart[id_unique]['quantity'] = quantity
-            else:
-                # اگه صفر یا کمتر بود، حذف کن
-                del self.cart[id_unique]
-            self.session.modified = True
-            return True
-        return False
