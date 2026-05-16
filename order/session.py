@@ -1,5 +1,6 @@
 from order.models import *
 from products.models import *
+from discounts.engine import DiscountEngine
 
 
 class OrderSession:
@@ -52,16 +53,23 @@ class OrderSession:
                         pricing_tab=pricing_tab,
                         material=material
                     )
-                    current_price = int(material_price.price)
+                    engine = DiscountEngine(user=self.request.user)
+
+                    discount = engine.calculate_item_price(
+                        base_price=material_price.price,
+                        product=product,
+                        material=material_price,
+                        pricing_tab=pricing_tab
+                    )
+
+                    current_price = int(discount.final_price)
+                    original_price = int(discount.base_price)
+
                 except MaterialPrice.DoesNotExist:
                     # اگه قیمت متریال پیدا نشد، از قیمت ذخیره شده استفاده کن
                     current_price = int(item.get('price', 0))
 
                 quantity = item.get('quantity', 1)
-                
-                # محاسبه original_price (اگه تخفیف داری، اینجا لاجیکش رو بنویس)
-                # فعلاً اگر original_price ذخیره نشده بود، current_price رو قرار بده
-                original_price = int(item.get('original_price', current_price))
 
                 # آماده‌سازی دیتای خروجی
                 yield {
