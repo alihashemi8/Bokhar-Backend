@@ -16,8 +16,14 @@ logger = logging.getLogger(__name__)
 class RushFeeSettingView(APIView):
     """
     GET/PUT تنظیمات تعرفه فوری - فقط یک رکورد (Singleton)
+    - GET: همه کاربران لاگین‌کرده می‌تونن ببینن
+    - PUT: فقط ادمین می‌تونه تغییر بده
     """
-    permission_classes = [IsAdminUser]  # فقط ادمین می‌تونه تغییر بده
+    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [IsAuthenticated()]
+        return [IsAdminUser()]
     
     def get_object(self):
         obj, created = RushFeeSetting.objects.get_or_create(
@@ -33,15 +39,14 @@ class RushFeeSettingView(APIView):
         )
         return obj
 
-
     def get(self, request):
-        """دریافت تنظیمات"""
+        """دریافت تنظیمات - فقط کاربر لاگین‌کرده"""
         setting = self.get_object()
         serializer = RushFeeSettingSerializer(setting)
         return Response(serializer.data)
 
     def put(self, request):
-        """به‌روزرسانی تنظیمات"""
+        """به‌روزرسانی تنظیمات - فقط ادمین"""
         setting = self.get_object()
         serializer = RushFeeSettingSerializer(setting, data=request.data, partial=True)
         if serializer.is_valid():
@@ -54,7 +59,7 @@ class DeliveryTemplateListView(APIView):
     """
     لیست تمپلیت‌های تحویل (ظرفیت‌ها)
     """
-    permission_classes = [IsAuthenticated]  # همه کاربران می‌تونن ببینن
+    permission_classes = [IsAuthenticated]  # همه کاربران لاگین‌کرده می‌تونن ببینن
     
     def get(self, request):
         templates = DeliveryTemplate.objects.all()
@@ -231,8 +236,7 @@ class OrderValidationView(APIView):
             response_data['rush_fee'] = fee
             response_data['total_price'] = subtotal + fee
 
-                
-                # چک کردن ظرفیت
+        # چک کردن ظرفیت
         template = DeliveryTemplate.objects.first()
         if template:
             if response_data['delivery_type'] == '24h':
@@ -258,7 +262,6 @@ class OrderValidationView(APIView):
         return Response(response_data)
 
 
-# کلاس‌های قبلی (PickupTime) - بدون تغییر یا با اصلاح جزئی
 class PickupTimeListCreateView(APIView):
     permission_classes = [IsAdminUser]
     
