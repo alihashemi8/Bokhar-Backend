@@ -24,6 +24,7 @@ class DeliveryTemplateSerializer(serializers.ModelSerializer):
             'time_shift',
             'urgent_24_capacity',
             'urgent_48_capacity',
+            'disabled_dates', 
             'base_price',
             'price_add',
             'is_active'

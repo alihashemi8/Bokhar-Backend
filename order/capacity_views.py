@@ -71,9 +71,16 @@ class DeliveryTemplateUpdateView(APIView):
     def put(self, request, pk):
         template = get_object_or_404(DeliveryTemplate, pk=pk)
         # فقط فیلدهای ظرفیت رو آپدیت می‌کنیم
-        allowed_fields = ['urgent_24_capacity', 'urgent_48_capacity', 'base_price', 'price_add', 'is_active']
+        allowed_fields = ['urgent_24_capacity', 'urgent_48_capacity', 'disabled_dates', 'base_price', 'price_add', 'is_active']
+       
+        print("🔴 Request data:", request.data)
+        print("🔴 Request data type:", type(request.data))
         data = {k: v for k, v in request.data.items() if k in allowed_fields}
-        
+        print("🔴 Filtered data:", data)
+        print("🔴 disabled_dates in data:", 'disabled_dates' in data)
+        if 'disabled_dates' in data:
+            print("🔴 disabled_dates value:", data['disabled_dates'])
+            print("🔴 disabled_dates type:", type(data['disabled_dates']))
         serializer = DeliveryTemplateSerializer(template, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()

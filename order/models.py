@@ -107,6 +107,14 @@ class DeliveryTemplate(models.Model):
     )
     urgent_24_capacity  = models.PositiveIntegerField(default=5)
     urgent_48_capacity  = models.PositiveIntegerField(default=10)
+    
+    # ← این فیلد رو اضافه کن
+    disabled_dates = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="لیست تاریخ‌های غیرفعال (YYYY-MM-DD)"
+    )
+    
     base_price          = models.PositiveIntegerField(default=0)
     price_add = models.PositiveIntegerField(default=0)
     is_active           = models.BooleanField(default=True)
@@ -118,6 +126,7 @@ class DeliveryTemplate(models.Model):
 
     def __str__(self):
         return f"تحویل‌دهی | {self.get_time_shift_display()}"
+
 
 class OrderStatus(models.TextChoices):
 
