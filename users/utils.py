@@ -84,7 +84,7 @@ OTP_WINDOW = 600        # بازه 10 دقیقه  در هر 10دقیقه فقط 
 BASE_BLOCK_TIME = 180   # زمان بلاک پایه
 
 def generate_otp(phone):
-    code = str(secrets.randbelow(900000) + 100000)
+    code = str(secrets.randbelow(99999) + 10000)
 
     cache.set(
         f"otp:{phone}",

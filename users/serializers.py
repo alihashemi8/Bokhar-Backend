@@ -48,17 +48,16 @@ class SendOTPSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         phone = attrs["phone"]
-        can_send, remaining = can_send_otp(phone)
+        can_send, message_or_remaining = can_send_otp(phone)
 
         if not can_send:
-            minutes, seconds = safe_divmod(remaining)
-            raise serializers.ValidationError(
-                {
-                    "پیام": f"شما بیش از حد درخواست دادید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
-                }
-            )
+            # message_or_remaining در اینجا رشته‌ای مثل "شماره بلاک است..." است
+            # اگر می‌خواهید دقیقاً مثل قبل دقیقه/ثانیه نمایش دهید، باید منطق را تغییر دهید
+            # یا اینکه از is_phone_blocked جداگانه استفاده کنید
+            raise serializers.ValidationError({"پیام": message_or_remaining})
 
         return attrs
+
 
 
 # ------------------------
@@ -74,33 +73,23 @@ class RegisterOTPSerializer(serializers.Serializer):
         otp = attrs.get("otp")
 
         if not phone or len(phone) != 11:
-            raise serializers.ValidationError(
-                {"phone": "شماره تلفن باید ۱۱ رقم باشد"}
-            )
+            raise serializers.ValidationError({"phone": "شماره تلفن باید ۱۱ رقم باشد"})
 
+        # چک بلاک بودن
         blocked, remaining = is_phone_blocked(phone)
         if blocked:
             minutes, seconds = safe_divmod(remaining)
-            raise serializers.ValidationError(
-                {
-                    "پیام": f"شما بیش از حد درخواست دادید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
-                }
-            )
+            raise serializers.ValidationError({
+                "پیام": f"شما بیش از حد تلاش کردید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
+            })
 
-        if not verify_otp(phone, otp):
-            blocked, remaining = register_failed_attempt(phone)
-            if blocked:
-                minutes, seconds = safe_divmod(remaining)
-                raise serializers.ValidationError(
-                    {
-                        "پیام": f"شما بیش از حد تلاش کردید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
-                    }
-                )
-            raise serializers.ValidationError(
-                {"otp": "کد وارد شده اشتباه است"}
-            )
+        # بررسی OTP - توجه به unpack کردن تاپل
+        is_valid, message = verify_otp(phone, otp)
+        if not is_valid:
+            # message می‌تواند "کد اشتباه است" یا "شماره بلاک است" یا "منقضی شده" باشد
+            raise serializers.ValidationError({"otp": message})
 
-        cache.delete(f"otp_fail:{phone}")
+        # موفق: verify_otp خودش cache.delete_many کرده
         return attrs
 
     def create(self, validated_data):
@@ -132,35 +121,22 @@ class LoginOTPSerializer(serializers.Serializer):
         try:
             user = User.objects.get(phone=phone)
         except User.DoesNotExist:
-            raise serializers.ValidationError(
-                {"پیام": "شماره اشتباه است یا ثبت‌نام نکرده‌اید"}
-            )
+            raise serializers.ValidationError({"پیام": "شماره اشتباه است یا ثبت‌نام نکرده‌اید"})
 
         blocked, remaining = is_phone_blocked(phone)
         if blocked:
             minutes, seconds = safe_divmod(remaining)
-            raise serializers.ValidationError(
-                {
-                    "پیام": f"شما بیش از حد تلاش کردید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
-                }
-            )
+            raise serializers.ValidationError({
+                "پیام": f"شما بیش از حد تلاش کردید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
+            })
 
-        if not verify_otp(phone, otp):
-            blocked, remaining = register_failed_attempt(phone)
-            if blocked:
-                minutes, seconds = safe_divmod(remaining)
-                raise serializers.ValidationError(
-                    {
-                        "پیام": f"شما بیش از حد تلاش کردید. لطفاً {minutes} دقیقه و {seconds} ثانیه صبر کنید."
-                    }
-                )
-            raise serializers.ValidationError(
-                {"otp": "کد وارد شده اشتباه است"}
-            )
+        is_valid, message = verify_otp(phone, otp)
+        if not is_valid:
+            raise serializers.ValidationError({"otp": message})
 
-        cache.delete(f"otp_fail:{phone}")
         attrs["user"] = user
         return attrs
+
 
 
 # ------------------------
@@ -218,9 +194,9 @@ class EditPasswordSerializer(serializers.Serializer):
                     {"old_password": "رمز عبور فعلی اشتباه است"}
                 )
 
-        if len(password) < 6:
+        if len(password) < 8:
             raise serializers.ValidationError(
-                {"password": "حداقل طول رمز عبور ۶ کاراکتر است"}
+                {"password": "حداقل طول رمز عبور 8 کاراکتر است"}
             )
 
         rules = [
