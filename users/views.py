@@ -1,14 +1,8 @@
-import json
-
 from django.conf import settings
 from django.http import JsonResponse
-from django.contrib.auth import get_user_model
-from django.views.decorators.csrf import (
-    csrf_exempt,
-    csrf_protect,
-    ensure_csrf_cookie,
-)
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie, csrf_protect
 from django.utils.decorators import method_decorator
+from django.contrib.auth import get_user_model
 
 from rest_framework import status
 from rest_framework.views import APIView
@@ -19,33 +13,24 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
-from .models import User
 from .serializers import (
+    UserSerializer,
     SendOTPSerializer,
+    VerifyOTPSerializer,
     RegisterOTPSerializer,
     LoginOTPSerializer,
     LoginPasswordSerializer,
     EditFullNameSerializer,
     EditPasswordSerializer,
-    UserSerializer,
 )
-from .tasks import send_sms
 from .utils import generate_otp
-
-
 
 User = get_user_model()
 
-# ------------------------------------------------------------------
-# JWT Cookie Helper
-# ------------------------------------------------------------------
-
-def _set_jwt_cookies(response: Response, refresh_token: RefreshToken) -> Response:
+def _set_jwt_cookies(response, refresh_token):
     simple_jwt = getattr(settings, "SIMPLE_JWT", {})
-
     cookie_secure = simple_jwt.get("AUTH_COOKIE_SECURE", False)
     cookie_samesite = simple_jwt.get("AUTH_COOKIE_SAMESITE", "Lax")
-
     access_token = str(refresh_token.access_token)
     refresh_token_str = str(refresh_token)
 
@@ -58,7 +43,6 @@ def _set_jwt_cookies(response: Response, refresh_token: RefreshToken) -> Respons
         max_age=int(simple_jwt.get("ACCESS_TOKEN_LIFETIME_SECONDS", 3600)),
         path="/",
     )
-
     response.set_cookie(
         key=simple_jwt.get("AUTH_COOKIE_REFRESH", "refresh"),
         value=refresh_token_str,
@@ -68,13 +52,7 @@ def _set_jwt_cookies(response: Response, refresh_token: RefreshToken) -> Respons
         max_age=int(simple_jwt.get("REFRESH_TOKEN_LIFETIME_SECONDS", 604800)),
         path="/",
     )
-
     return response
-
-
-# ------------------------------------------------------------------
-# OTP
-# ------------------------------------------------------------------
 
 @method_decorator(csrf_exempt, name="dispatch")
 class SendOTPView(APIView):
@@ -86,11 +64,22 @@ class SendOTPView(APIView):
         if serializer.is_valid():
             phone = serializer.validated_data["phone"]
             code = generate_otp(phone)
-            send_sms.delay(phone, code)
+            # send_sms.delay(phone, code)  # celery task
+            print(f"OTP for {phone}: {code}", flush=True)  # flush=True اضافه شود
             return Response({"detail": "کد ارسال شد"}, status=status.HTTP_200_OK)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@method_decorator(csrf_exempt, name="dispatch")
+class VerifyOTPView(APIView):
+    """برای بررسی کد بدون consume (استفاده در فرانت قبل از ارسال نهایی)"""
+    serializer_class = VerifyOTPSerializer
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            return Response({"detail": "کد صحیح است"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @method_decorator(csrf_exempt, name="dispatch")
 class RegisterOTPView(APIView):
@@ -102,22 +91,19 @@ class RegisterOTPView(APIView):
         if serializer.is_valid():
             user = serializer.save()
             refresh = RefreshToken.for_user(user)
-
             response = Response(
                 {
                     "phone": user.phone,
                     "fullname": user.fullname,
-                    "user": user.is_admin,
+                    "is_admin": user.is_admin,
                     "role": user.role,
+                    "has_password": user.has_usable_password(),
                     "message": "خوش آمدید",
                 },
                 status=status.HTTP_200_OK,
             )
-
             return _set_jwt_cookies(response, refresh)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 @method_decorator(csrf_exempt, name="dispatch")
 class LoginOTPView(APIView):
@@ -129,22 +115,19 @@ class LoginOTPView(APIView):
         if serializer.is_valid():
             user = serializer.validated_data["user"]
             refresh = RefreshToken.for_user(user)
-
             response = Response(
                 {
                     "phone": user.phone,
                     "fullname": user.fullname,
-                    "user": user.is_admin,
+                    "is_admin": user.is_admin,
                     "role": user.role,
+                    "has_password": user.has_usable_password(),
                     "message": "خوش آمدید",
                 },
                 status=status.HTTP_200_OK,
             )
-
             return _set_jwt_cookies(response, refresh)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 @method_decorator(csrf_exempt, name="dispatch")
 class LoginPasswordView(APIView):
@@ -156,34 +139,26 @@ class LoginPasswordView(APIView):
         if serializer.is_valid():
             user = serializer.validated_data["user"]
             refresh = RefreshToken.for_user(user)
-
             response = Response(
                 {
                     "phone": user.phone,
                     "fullname": user.fullname,
-                    "user": user.is_admin,
+                    "is_admin": user.is_admin,
                     "role": user.role,
+                    "has_password": user.has_usable_password(),
                     "message": "خوش آمدید",
                 },
                 status=status.HTTP_200_OK,
             )
-
             return _set_jwt_cookies(response, refresh)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-# ------------------------------------------------------------------
-# Logout / Refresh
-# ------------------------------------------------------------------
-
+@method_decorator(csrf_protect, name="dispatch")
 class LogOutView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         response = Response({"detail": "خروج با موفقیت انجام شد"}, status=200)
-
-        # blacklist refresh token
         refresh_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh")
         refresh_token = request.COOKIES.get(refresh_name)
         if refresh_token:
@@ -192,14 +167,9 @@ class LogOutView(APIView):
                 token.blacklist()
             except (TokenError, InvalidToken):
                 pass
-
         response.delete_cookie(settings.SIMPLE_JWT.get("AUTH_COOKIE", "access"), path="/")
         response.delete_cookie(refresh_name, path="/")
-
-
         return response
-
-
 
 @method_decorator(csrf_protect, name="dispatch")
 class RefreshTokenView(APIView):
@@ -217,28 +187,13 @@ class RefreshTokenView(APIView):
 
         try:
             old_refresh = RefreshToken(old_refresh_token)
-
-            # بررسی blacklist
-            if old_refresh.blacklisted:  # <-- اضافه کن
-                return Response(
-                    {"detail": "نشست شما منقضی شده است"},
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
-
             user = User.objects.get(id=old_refresh["user_id"])
             new_refresh = RefreshToken.for_user(user)
-
-            try:
-                old_refresh.check_blacklist()
-            except TokenError:
-                return Response({"detail": "نشست شما منقضی شده است"}, status=401)
-
-
+            
             response = Response(
                 {"detail": "توکن نوسازی شد"},
                 status=status.HTTP_200_OK,
             )
-
             return _set_jwt_cookies(response, new_refresh)
 
         except (TokenError, InvalidToken, User.DoesNotExist):
@@ -247,19 +202,13 @@ class RefreshTokenView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-
-
-# ------------------------------------------------------------------
-# Protected APIs
-# ------------------------------------------------------------------
-
+@method_decorator(csrf_protect, name="dispatch")
 class VerifyTokenView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
-
 
 @method_decorator(csrf_protect, name="dispatch")
 class EditFullNameView(APIView):
@@ -275,9 +224,7 @@ class EditFullNameView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response({"detail": "نام با موفقیت بروزرسانی شد"})
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 @method_decorator(csrf_protect, name="dispatch")
 class EditPasswordView(APIView):
@@ -288,24 +235,21 @@ class EditPasswordView(APIView):
         serializer = self.serializer_class(
             request.user,
             data=request.data,
-            partial=True,
             context={"request": request},
         )
         if serializer.is_valid():
             serializer.save()
             return Response({"detail": "رمز عبور با موفقیت تغییر کرد"})
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @ensure_csrf_cookie
 def get_csrf_token(request):
     return JsonResponse({'detail': 'CSRF cookie set'})
 
-
+@method_decorator(csrf_protect, name="dispatch")
 class CustomerViewSet(ReadOnlyModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # فقط مشتری‌ها (نه ادمین / seller)
         return User.objects.filter(role="user").order_by("-created_at")

@@ -11,6 +11,7 @@ from .views import (
     RefreshTokenView,
     VerifyTokenView,
     LogOutView,
+     VerifyOTPView,
     CustomerViewSet,
     get_csrf_token,
 )
@@ -18,7 +19,8 @@ from .views import (
 app_name = "users"
 
 urlpatterns = [
-    path("sent/otp/", SendOTPView.as_view(), name="otp"),
+    path("send/otp/", SendOTPView.as_view(), name="otp"),
+    path("verify/otp/", VerifyOTPView.as_view(), name="verify-otp"),  
     path("register/otp/", RegisterOTPView.as_view(), name="register"),
     path("login/otp/", LoginOTPView.as_view(), name="login_otp"),
     path("login/", LoginPasswordView.as_view(), name="login"),
