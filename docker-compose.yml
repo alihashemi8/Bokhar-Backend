@@ -1,21 +1,41 @@
-
 services:
-  drf:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - .:/app
-    depends_on:
-      - redis
-
   redis:
     image: redis:7
+
+  drf:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: bokhar.settings
 
   celery:
     build: .
     command: celery -A bokhar worker --loglevel=info
-    volumes:
+    volumes:  # <--- این بخش را اضافه کنید
       - .:/app
     depends_on:
       - redis
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: bokhar.settings
+
+  celery_beat:
+    build: .
+    command: celery -A bokhar beat --loglevel=info
+    volumes: 
+      - .:/app
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: bokhar.settings

@@ -1,15 +1,17 @@
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
 COPY requirements-base.txt .
-RUN pip install --no-cache-dir -r requirements-base.txt
+
+RUN pip install --no-cache-dir -r requirements-base.txt \
+  --index-url https://package-mirror.liara.ir/repository/pypi/simple
 
 COPY requirements-extra.txt .
-RUN pip install --no-cache-dir -r requirements-extra.txt
+RUN pip install --no-cache-dir -r requirements-extra.txt \
+  --index-url https://package-mirror.liara.ir/repository/pypi/simple
 
 COPY . /app
 
 EXPOSE 8000
-
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
