@@ -8,6 +8,15 @@ from products.permission import *
 from .models import NotificationForAdvertising, NotificationForLate, SmsLog
 from .serializers import *
 
+from django.shortcuts import get_object_or_404
+from rest_framework.decorators import action
+
+from order.models import Order, OrderStatus
+
+from .tasks_customer import (send_sms_to_customer_canceled,
+                             send_sms_to_customer_delivered,
+                             send_sms_to_customer_paid)
+from .tasks_seller import send_sms_to_seller_canceled
 
 class SmsLogViewSet(viewsets.ModelViewSet):
     queryset = SmsLog.objects.all()
@@ -79,19 +88,6 @@ class NotificationForLateViewSet(viewsets.ModelViewSet):
         transaction.on_commit(lambda: send_sms_for_late.delay(instance.id))
 
 
-from django.shortcuts import get_object_or_404
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-
-from order.models import Order, OrderStatus
-
-from .tasks_customer import (send_sms_to_customer_canceled,
-                             send_sms_to_customer_delivered,
-                             send_sms_to_customer_paid)
-from .tasks_seller import send_sms_to_seller_canceled
-
-
 class OrderNotificationViewSet(viewsets.ViewSet):
 
     permission_classes = [IsSeller]
@@ -146,3 +142,72 @@ class OrderNotificationViewSet(viewsets.ViewSet):
             )
 
         return Response({"message": msg}, status=status.HTTP_202_ACCEPTED)
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from discounts.models import ProductDiscount, GlobalDiscount, Coupon
+from .models import NotificationForLate
+from order.models import Order
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+
+
+class NotificationsAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({
+            "results": {
+                "reminders": [
+                    {
+                        "id": 1,
+                        "title": "یادآوری سفارش",
+                        "message": "سفارش شما فردا ساعت ۸ تا ۱۲ تحویل گرفته می‌شود.",
+                        "read": False,
+                        "created_at": "2026-05-29T12:00:00"
+                    },
+                    {
+                        "id": 2,
+                        "title": "لباس آماده تحویل",
+                        "message": "سفارش شماره #145 آماده تحویل است.",
+                        "read": True,
+                        "created_at": "2026-05-28T18:30:00"
+                    }
+                ],
+
+                "discounts": [
+                    {
+                        "id": 1,
+                        "title": "تخفیف ویژه",
+                        "message": "۲۰٪ تخفیف برای اولین سفارش",
+                        "percent": 20
+                    },
+                    {
+                        "id": 2,
+                        "title": "کد تخفیف تابستانه",
+                        "message": "با کد SUMMER50 پنجاه هزار تومان تخفیف بگیرید.",
+                        "percent": 15
+                    }
+                ],
+
+                "transactions": [
+                    {
+                        "id": 1,
+                        "amount": 250000,
+                        "type": "پرداخت",
+                        "created_at": "2026-05-27T15:20:00"
+                    },
+                    {
+                        "id": 2,
+                        "amount": 120000,
+                        "type": "بازگشت وجه",
+                        "created_at": "2026-05-25T10:15:00"
+                    }
+                ]
+            }
+        })
