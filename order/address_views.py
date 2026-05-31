@@ -14,12 +14,16 @@ from products.models import Product
 from .models import Order, OrderStatus, Address, OrderStatusLog
 from .serializers import *
 from .session import OrderSession
+
+import requests
+from django.conf import settings
+
 logger = logging.getLogger(__name__)
 
 
 
 class CreateAddressView(APIView):
-    permission_classes = [IsAuthenticated]
+  #  permission_classes = [IsAuthenticated]
     serializer_class = AddressSerializer
 
     def post(self, request):
@@ -31,7 +35,7 @@ class CreateAddressView(APIView):
 
 
 class ListAddressAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+  #  permission_classes = [IsAuthenticated]
     serializer_class = AddressDetailSerializer
 
     def get(self, request):
@@ -41,7 +45,7 @@ class ListAddressAPIView(APIView):
 
 
 class UpdateAddressAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+   # permission_classes = [IsAuthenticated]
     serializer_class = UpdateAddressSerializer
 
     def put(self, request, id):
@@ -53,9 +57,61 @@ class UpdateAddressAPIView(APIView):
 
 
 class DeleteAddressAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+  #  permission_classes = [IsAuthenticated]
 
     def delete(self, request, id):
         address = get_object_or_404(Address, id=id, user=request.user)
         address.delete()
         return Response({"message": "آدرس شما حذف شد."})
+
+class NeshanSearchAPIView(APIView):
+    def get(self, request):
+        term = request.GET.get("term")
+
+        if not term:
+            return Response(
+                {"error": "term is required"},
+                status=400,
+            )
+
+        response = requests.get(
+            "https://api.neshan.org/v1/search",
+            params={
+                "term": term,
+                "lat": 35.699756,
+                "lng": 51.338076,
+            },
+            headers={
+                "Api-Key": settings.NESHAN_API_KEY,
+            },
+            timeout=10,
+        )
+
+        return Response(response.json(), status=response.status_code)
+    
+class NeshanReverseAPIView(APIView):
+  #  permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        lat = request.GET.get("lat")
+        lng = request.GET.get("lng")
+
+        if not lat or not lng:
+            return Response(
+                {"error": "lat and lng required"},
+                status=400
+            )
+
+        response = requests.get(
+            "https://api.neshan.org/v5/reverse",
+            params={
+                "lat": lat,
+                "lng": lng,
+            },
+            headers={
+                "Api-Key": settings.NESHAN_API_KEY
+            },
+            timeout=10,
+        )
+
+        return Response(response.json())
