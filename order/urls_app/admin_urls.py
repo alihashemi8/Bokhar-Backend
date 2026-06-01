@@ -1,6 +1,5 @@
 from django.urls import path
 from ..order_admin_view import *
-app_name = "order"  # namespace جدا برای جلوگیری از تداخل
 
 urlpatterns = [
     # ---------- لیست سفارش‌ها بر اساس وضعیت ----------

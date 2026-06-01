@@ -2,7 +2,6 @@ from django.urls import path
 from ..capacity_views import *
 from rest_framework.permissions import IsAdminUser
 
-app_name = "order"
 
 urlpatterns = [
     # Rush Fee Settings (Singleton - فقط یک رکورد)

@@ -56,5 +56,3 @@ def get_available_delivery_capacity(order_type, date, shift):
         capacity = template.urgent_48_capacity   # فیلد urgent_48_capacity در مدل موجود است
         urgent_48 = used_all.filter(order_type="48ساعته").count()
         return max(0, capacity - urgent_48)
-
-

@@ -1,7 +1,5 @@
 from django.urls import path
 from ..address_views import *
-app_name = "order"
-
 urlpatterns = [
 
 

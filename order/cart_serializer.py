@@ -40,10 +40,7 @@ from .models import (
 )
 from discounts.engine import DiscountEngine
 from products.models import MaterialPrice, Size  # فرض بر این است که Size از product.models می‌آید
-from .utils import (
-    get_available_pickup_capacity,
-    get_available_delivery_capacity
-)
+from .utils import *
 from  .session import *
 
 

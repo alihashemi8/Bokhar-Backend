@@ -1,7 +1,6 @@
 from django.urls import path
 from ..cart_views import *  
 
-app_name = "order"
 
 urlpatterns = [
     # مشاهده سبد خرید
