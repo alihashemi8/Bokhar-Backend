@@ -11,7 +11,7 @@ from users.models import Address, User
 import random
 import string
 from datetime import timedelta
-from discounts.models import (          # ← ایمپورت تخفیف‌های جدید
+from discounts.models import (         
     ProductDiscount,
     GlobalDiscount,
     Coupon,
