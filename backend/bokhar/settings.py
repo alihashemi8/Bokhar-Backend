@@ -4,6 +4,7 @@ from pathlib import Path
 
 from decouple import config
 
+NESHAN_API_KEY = config("NESHAN_API_KEY")
 SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=False, cast=bool)
 
@@ -36,7 +37,11 @@ INSTALLED_APPS = [
     "order",
     "notifications",
     "report",
+<<<<<<< HEAD:bokhar/settings.py
+    "wallet"
+=======
     #"wallet"
+>>>>>>> 5d5e438613b77593787065d13dc4280c68c5002d:backend/bokhar/settings.py
 ]
 
 MIDDLEWARE = [

@@ -19,6 +19,16 @@ celery==5.6.0
 django_celery_results==2.6.0
 
 kavenegar==1.1.2
+<<<<<<< HEAD:requirements-base.txt
+django-extensions==4.1
+djangorestframework_simplejwt==5.5.1
+pytest==9.0.2
+pytest-django==4.11.1
+isort==7.0.0
+black==25.12.0
+Pillow==10.0.0
+openpyxl==3.1.5
+=======
 
 openpyxl==3.1.5
 
@@ -31,3 +41,4 @@ vine==5.1.0
 
 sqlparse==0.5.4
 tzdata==2025.2
+>>>>>>> 5d5e438613b77593787065d13dc4280c68c5002d:backend/requirements-base.txt

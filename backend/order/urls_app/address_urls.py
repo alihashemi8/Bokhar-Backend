@@ -8,6 +8,7 @@ urlpatterns = [
     path("address/list/", ListAddressAPIView.as_view(), name="address_list"),
     path("address/update/<int:id>/", UpdateAddressAPIView.as_view(), name="address_update"),
     path("address/delete/<int:id>/", DeleteAddressAPIView.as_view(), name="address_delete"),
-
+    path("neshan/search/", NeshanSearchAPIView.as_view()),
+    path("neshan/reverse/", NeshanReverseAPIView.as_view()),
 
 ]

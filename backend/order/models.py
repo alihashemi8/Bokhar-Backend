@@ -4,7 +4,7 @@ from datetime import time, datetime
 from products.models import *
 from users.models import Address, User
 from datetime import timedelta
-from discounts.models import (          # ← ایمپورت تخفیف‌های جدید
+from discounts.models import (         
     ProductDiscount,
     Coupon,
 )
