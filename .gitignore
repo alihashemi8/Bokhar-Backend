@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # Virtual environments (common names)
-venv/
+venv
 
 
 # Environment variable files (contains secrets)
@@ -78,6 +78,9 @@ dist/
 
 
 # Django
-db.sqlite3
+
 media/
 staticfiles/
+
+celerybeat-schedule
+
