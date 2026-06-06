@@ -1,41 +1,76 @@
+version: '3.8'
+
 services:
-  redis:
-    image: redis:7
-
-  drf:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
+  # ۱. دیتابیس پستگرس
+  db:
+    image: postgres:15-alpine
+    restart: always
     volumes:
-      - .:/app
-    ports:
-      - "8000:8000"
-    depends_on:
-      - redis
+      - postgres_data:/var/lib/postgresql/data
     env_file:
       - .env
-    environment:
-      DJANGO_SETTINGS_MODULE: bokhar.settings
 
+  # ۲. ردیس برای کَش و سلری
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+
+  # ۳. بک‌اکند جنگو (نام سرویس برای هماهنگی با ان‌جینکس backend شد)
+  backend:
+    build: ./backend
+    restart: always
+    # اجرای اتوماتیک مایگریشن‌ها و جمع‌آوری استاتیک‌فایل‌ها پیش از لود گانیکورن
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn bokhar.wsgi:application --bind 0.0.0.0:8000 --workers 5 --timeout 120"
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+
+  # ۴. ورکر سلری
   celery:
-    build: .
-    command: celery -A bokhar worker --loglevel=info
-    volumes:  # <--- این بخش را اضافه کنید
-      - .:/app
-    depends_on:
-      - redis
+    build: ./backend
+    restart: always
+    command: celery -A bokhar worker --loglevel=info --concurrency=4
     env_file:
       - .env
-    environment:
-      DJANGO_SETTINGS_MODULE: bokhar.settings
+    depends_on:
+      - db
+      - redis
 
+  # ۵. سلری بیت (تسک‌های زمان‌بندی شده)
   celery_beat:
-    build: .
+    build: ./backend
+    restart: always
     command: celery -A bokhar beat --loglevel=info
-    volumes: 
-      - .:/app
-    depends_on:
-      - redis
     env_file:
       - .env
-    environment:
-      DJANGO_SETTINGS_MODULE: bokhar.settings
+    depends_on:
+      - db
+      - redis
+
+  # ۶. فرانت‌اکند ری‌اکت به همراه Nginx داخلی (مغز متفکر شبکه و لایه بیرونی)
+  frontend:
+    build: ./Bokhar-Frontend
+    restart: always
+    ports:
+      - "80:80" # باز کردن پورت 80 سرور برای دسترسی عمومی به سایت
+    volumes:
+      - static_volume:/app/staticfiles:ro # اشتراک فایل‌های استاتیک جنگو با Nginx فرانت (فقط خواندنی)
+      - media_volume:/app/media:ro       # اشتراک عکس محصولات با Nginx فرانت (فقط خواندنی)
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
